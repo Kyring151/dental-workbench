@@ -825,13 +825,38 @@ function initNewCaseWizard() {
     return tags.slice(0, 3);
   }
 
-  function saveCase() {
+  async function uploadImagesCloud(images) {
+    const out = { pre: [], during: [], post: [] };
+    for (const k of ["pre", "during", "post"]) {
+      out[k] = [];
+      for (const img of images[k] || []) {
+        try {
+          const url = await window.CloudData.uploadImage(img.url);
+          out[k].push({ ...img, url: url.replace(/^http:/, "https:") });
+        } catch (e) {
+          alert((e && e.message) || "图片上传失败，请重试");
+          return null;
+        }
+      }
+    }
+    return out;
+  }
+
+  async function saveCase() {
     const selectedType = value("f-type");
-    const images = {
+
+    const rawImages = {
       pre: uploadedImages.pre,
       during: uploadedImages.during,
       post: uploadedImages.post
     };
+
+    // 云端模式：把图片真正上传到 Cloudinary；本地模式：直接用 base64
+    const images =
+      window.CloudData && window.CloudData.isActive()
+        ? await uploadImagesCloud(rawImages)
+        : { pre: rawImages.pre.slice(), during: rawImages.during.slice(), post: rawImages.post.slice() };
+    if (!images) return;
 
     const c = {
       id: genCaseId(),
@@ -851,11 +876,18 @@ function initNewCaseWizard() {
       plan: value("f-plan"),
       treatmentType: selectedType,
       tags: collectTags(),
+      updatedAt: new Date().toISOString(),
       images
     };
 
     Storage.addCase(c);
     clearDraft();
+
+    // 云端模式下等待该病例真正写入云端后再跳转详情页
+    if (window.CloudData && window.CloudData.isActive()) {
+      await window.CloudData.awaitSaved(c.id);
+    }
+
     location.href = "case-detail.html?id=" + c.id;
   }
 
@@ -882,8 +914,16 @@ function initNewCaseWizard() {
 /* ==========================================================
    7. Initialize
    ========================================================== */
-function init() {
+async function init() {
   initNavigation();
+
+  // 云端模式：等待 CloudData 就绪（可能弹出登录浮层）；本地模式直接灌入缓存
+  if (window.CloudData && window.CloudData.isActive()) {
+    await window.CloudData.ready;
+  } else {
+    Storage.hydrateFromLocal();
+  }
+
   initProfile();
   renderDashboardStats();
   renderRecentCases();

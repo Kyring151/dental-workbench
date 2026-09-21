@@ -1,44 +1,69 @@
 /**
- * 齿案台 · 本地数据层（localStorage）
- * 纯静态站点（GitHub Pages）无法用后端数据库，这里用浏览器 localStorage
- * 实现「病例列表 / 用户个人资料」的本地持久化。
- * 后续接入真实后端时，把本文件的函数体替换为 fetch 调用即可，调用方不变。
+ * 齿案台 · 数据层（内存缓存 + 本地/云端双持久化）
+ *
+ * 工作台所有代码都从这里读写数据，内部会按配置自动选择存储：
+ *  - 未配置云端（默认）→ 写入浏览器 localStorage（离线可用）
+ *  - 配置云端后        → 写入 Supabase 云数据库（手机/电脑同步）
+ *
+ * 对外接口保持同步调用；云模式时数据先由 cloud.js 灌入内存缓存，
+ * 写入在内存中即时生效，同时后台逐步同步到云端。
  */
-
 const Storage = {
-  KEY_CASES: "dentalWorkbench.cases",
-  KEY_PROFILE: "dentalWorkbench.profile",
+  mode: "local",
+
+  /* ---- 内存缓存（唯一真相来源） ---- */
+  _cases: [],
+  _profile: {},
+
+  /* ---- 持久化分发 ---- */
+  _persist() {
+    if (window.CloudData && window.CloudData.isActive()) {
+      window.CloudData.replaceAll(this._cases);
+      window.CloudData.saveProfile(this._profile);
+      return;
+    }
+    try {
+      localStorage.setItem(Storage.KEY_CASES, JSON.stringify(this._cases));
+      localStorage.setItem(Storage.KEY_PROFILE, JSON.stringify(this._profile));
+    } catch (e) {
+      alert("本地存储空间不足，可能是图片过大过多。请删除部分大图后重试。");
+    }
+  },
 
   /* ---- 病例 CRUD ---- */
-  getCases() {
+  hydrateFromLocal() {
     try {
-      return JSON.parse(localStorage.getItem(this.KEY_CASES)) || [];
+      this._cases = JSON.parse(localStorage.getItem(Storage.KEY_CASES)) || [];
     } catch {
-      return [];
+      this._cases = [];
     }
+    try {
+      this._profile = JSON.parse(localStorage.getItem(Storage.KEY_PROFILE)) || {};
+    } catch {
+      this._profile = {};
+    }
+  },
+
+  getCases() {
+    return this._cases;
   },
 
   setCases(list) {
-    try {
-      localStorage.setItem(this.KEY_CASES, JSON.stringify(list));
-    } catch (e) {
-      alert("本地存储空间不足，可能是上传的图片过大过多。请退回上一步删除部分大图后再保存。");
-    }
+    this._cases = list;
+    this._persist();
   },
 
   getCase(id) {
-    return this.getCases().find((c) => c.id === id);
+    return this._cases.find((c) => c.id === id);
   },
 
   addCase(c) {
-    const list = this.getCases();
-    list.push(c);
-    this.setCases(list);
+    this._cases.push(c);
+    this._persist();
   },
 
   updateCaseStatus(id, status) {
-    const list = this.getCases();
-    const c = list.find((x) => x.id === id);
+    const c = this._cases.find((x) => x.id === id);
     if (c) {
       c.status = status;
       if (status === "已完成" && !c.completionDate) {
@@ -46,34 +71,33 @@ const Storage = {
       } else if (status === "进行中") {
         c.completionDate = null;
       }
-      this.setCases(list);
+      this._persist();
     }
-    return list.find((x) => x.id === id);
+    return this._cases.find((x) => x.id === id);
   },
 
   addTimelineEntry(id, entry) {
-    const list = this.getCases();
-    const c = list.find((x) => x.id === id);
+    const c = this._cases.find((x) => x.id === id);
     if (c) {
       c.timeline = c.timeline || [];
       c.timeline.push(entry);
-      this.setCases(list);
+      this._persist();
     }
-    return list.find((x) => x.id === id);
+    return this._cases.find((x) => x.id === id);
   },
 
   /* ---- 用户个人资料 ---- */
   getProfile() {
-    try {
-      return JSON.parse(localStorage.getItem(this.KEY_PROFILE)) || {};
-    } catch {
-      return {};
-    }
+    return this._profile;
   },
 
   setProfile(p) {
-    localStorage.setItem(this.KEY_PROFILE, JSON.stringify(p));
-  }
+    this._profile = p;
+    this._persist();
+  },
+
+  KEY_CASES: "dentalWorkbench.cases",
+  KEY_PROFILE: "dentalWorkbench.profile"
 };
 
 /* ---- 通用工具 ---- */
