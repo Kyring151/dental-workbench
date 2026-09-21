@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="口腔患者病例工作台 · 首页" />
+  <title>工作台 · 齿案台</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="dashboard">
+
+  <!-- ======== App Shell / Top Bar ======== -->
+  <header class="top-bar">
+    <div class="top-bar__inner">
+      <a href="index.html" class="brand">
+        <span class="brand__icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 48 48"><defs><linearGradient id="toothGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7DD3FC"/><stop offset="1" stop-color="#38BDF8"/></linearGradient></defs><path d="M24 5C16 5 10.5 11 10 18c-.3 4.5 1.5 9 3.5 12.5 1.6 2.7 3.4 3.4 4.8 2.8 1.2-.5 2-2.2 2.9-4.6.6-1.7 1.4-2.7 2.8-2.7s2.2 1 2.8 2.7c.9 2.4 1.7 4.1 2.9 4.6 1.4.6 3.2-.1 4.8-2.8 2-3.5 3.8-8 3.5-12.5C37.5 11 32 5 24 5z" fill="url(#toothGrad)"/><circle cx="19" cy="16" r="2.4" fill="#fff"/><circle cx="29" cy="16" r="2.4" fill="#fff"/><circle cx="19" cy="15.5" r="1.1" fill="#0EA5E9"/><circle cx="29" cy="15.5" r="1.1" fill="#0EA5E9"/><path d="M20 21.2c1 .8 2.4 1.2 4 1.2s3-.4 4-1.2" stroke="#0B3B52" stroke-width="1.6" stroke-linecap="round" fill="none"/><circle cx="34.5" cy="11" r="2.7" fill="#FDE68A" opacity="0.95"/></svg>
+        </span>
+        <span>齿案台</span>
+      </a>
+      <nav class="top-bar__nav" aria-label="主导航">
+        <a href="index.html" class="nav-link" data-nav="dashboard">工作台</a>
+        <a href="cases.html" class="nav-link" data-nav="cases">病例列表</a>
+        <a href="new-case.html" class="nav-link" data-nav="new-case">新建病例</a>
+        <a href="case-detail.html" class="nav-link" data-nav="case-detail">病例详情</a>
+      </nav>
+      <button class="menu-toggle" aria-label="打开菜单" aria-expanded="false">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="mobile-nav" id="mobile-nav">
+    <a href="index.html" class="nav-link" data-nav="dashboard">工作台</a>
+    <a href="cases.html" class="nav-link" data-nav="cases">病例列表</a>
+    <a href="new-case.html" class="nav-link" data-nav="new-case">新建病例</a>
+    <a href="case-detail.html" class="nav-link" data-nav="case-detail">病例详情</a>
+  </div>
+  <!-- ======== / App Shell / Top Bar ======== -->
+
+  <main class="page">
+    <div class="page__header">
+      <div>
+        <h1 class="page__title" id="greeting">你好，医生</h1>
+        <p class="page__subtitle">这里是你的口腔病例概览，所有数据均保存在本地浏览器。</p>
+      </div>
+      <div class="page__actions">
+        <a href="cases.html" class="btn btn--secondary">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          病例列表
+        </a>
+        <a href="new-case.html" class="btn btn--primary">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建病例
+        </a>
+      </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="stats-grid">
+      <div class="stat-card stat-card--primary">
+        <div class="stat-card__icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <div class="stat-card__value" id="stat-total">--</div>
+        <div class="stat-card__label">总病例数</div>
+      </div>
+
+      <div class="stat-card stat-card--teal">
+        <div class="stat-card__icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <div class="stat-card__value" id="stat-done">--</div>
+        <div class="stat-card__label">已完成</div>
+      </div>
+
+      <div class="stat-card stat-card--purple">
+        <div class="stat-card__icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+        <div class="stat-card__value" id="stat-active">--</div>
+        <div class="stat-card__label">进行中</div>
+      </div>
+
+      <div class="stat-card stat-card--rose">
+        <div class="stat-card__icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </div>
+        <div class="stat-card__value" id="stat-images">--</div>
+        <div class="stat-card__label">影像总数</div>
+      </div>
+    </div>
+
+    <!-- 最近病例 -->
+    <div class="card">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">最近病例</h2>
+          <p class="card__subtitle">最近录入的口腔病例记录</p>
+        </div>
+        <button class="btn btn--secondary btn--sm" type="button" id="profile-edit">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          设置我的姓名
+        </button>
+      </div>
+      <div class="case-grid" id="recent-cases"><!-- JS 渲染 --></div>
+    </div>
+  </main>
+
+  <script src="mock.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

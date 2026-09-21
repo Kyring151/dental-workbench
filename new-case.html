@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="口腔患者病例工作台 · 新建病例" />
+  <title>新建病例 · 齿案台</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="new-case">
+
+  <!-- ======== App Shell / Top Bar ======== -->
+  <header class="top-bar">
+    <div class="top-bar__inner">
+      <a href="index.html" class="brand">
+        <span class="brand__icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 48 48"><defs><linearGradient id="toothGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7DD3FC"/><stop offset="1" stop-color="#38BDF8"/></linearGradient></defs><path d="M24 5C16 5 10.5 11 10 18c-.3 4.5 1.5 9 3.5 12.5 1.6 2.7 3.4 3.4 4.8 2.8 1.2-.5 2-2.2 2.9-4.6.6-1.7 1.4-2.7 2.8-2.7s2.2 1 2.8 2.7c.9 2.4 1.7 4.1 2.9 4.6 1.4.6 3.2-.1 4.8-2.8 2-3.5 3.8-8 3.5-12.5C37.5 11 32 5 24 5z" fill="url(#toothGrad)"/><circle cx="19" cy="16" r="2.4" fill="#fff"/><circle cx="29" cy="16" r="2.4" fill="#fff"/><circle cx="19" cy="15.5" r="1.1" fill="#0EA5E9"/><circle cx="29" cy="15.5" r="1.1" fill="#0EA5E9"/><path d="M20 21.2c1 .8 2.4 1.2 4 1.2s3-.4 4-1.2" stroke="#0B3B52" stroke-width="1.6" stroke-linecap="round" fill="none"/><circle cx="34.5" cy="11" r="2.7" fill="#FDE68A" opacity="0.95"/></svg>
+        </span>
+        <span>齿案台</span>
+      </a>
+      <nav class="top-bar__nav" aria-label="主导航">
+        <a href="index.html" class="nav-link" data-nav="dashboard">工作台</a>
+        <a href="cases.html" class="nav-link" data-nav="cases">病例列表</a>
+        <a href="new-case.html" class="nav-link" data-nav="new-case">新建病例</a>
+        <a href="case-detail.html" class="nav-link" data-nav="case-detail">病例详情</a>
+      </nav>
+      <button class="menu-toggle" aria-label="打开菜单" aria-expanded="false">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="mobile-nav" id="mobile-nav">
+    <a href="index.html" class="nav-link" data-nav="dashboard">工作台</a>
+    <a href="cases.html" class="nav-link" data-nav="cases">病例列表</a>
+    <a href="new-case.html" class="nav-link" data-nav="new-case">新建病例</a>
+    <a href="case-detail.html" class="nav-link" data-nav="case-detail">病例详情</a>
+  </div>
+  <!-- ======== / App Shell / Top Bar ======== -->
+
+  <main class="page">
+    <div class="page__header">
+      <div>
+        <div class="breadcrumbs">
+          <a href="cases.html">病例列表</a>
+          <span class="breadcrumbs__sep" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </span>
+          <span>新建病例</span>
+        </div>
+        <h1 class="page__title">新建病例</h1>
+        <p class="page__subtitle">分步录入患者基础信息、诊疗信息与影像资料。填写中途退出会自动保存草稿。</p>
+      </div>
+      <div class="page__actions">
+        <button class="btn btn--ghost" type="button" id="draft-clear">清空草稿</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <!-- 步骤指示器 -->
+      <div class="steps" aria-label="录入进度">
+        <div class="step step--active">
+          <span class="step__number">1</span>
+          基本信息
+        </div>
+        <div class="step">
+          <span class="step__number">2</span>
+          诊疗信息
+        </div>
+        <div class="step">
+          <span class="step__number">3</span>
+          影像资料
+        </div>
+      </div>
+
+      <!-- 第 1 步：基本信息 -->
+      <section class="wizard-step">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="f-name">患者昵称 *</label>
+            <input type="text" class="input" id="f-name" placeholder="例如：张女士" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="f-age">年龄</label>
+            <input type="number" class="input" id="f-age" placeholder="例如：34" min="0" max="120" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="f-gender">性别</label>
+            <select class="select" id="f-gender">
+              <option value="">请选择</option>
+              <option value="男">男</option>
+              <option value="女">女</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="f-visit-date">就诊日期</label>
+            <input type="date" class="input" id="f-visit-date" value="2026-09-21" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-chief">主诉 / 就诊原因 *</label>
+          <textarea class="textarea" id="f-chief" placeholder="患者为什么来看牙，例如：右下后牙咬东西痛 2 周"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-request">患者诉求</label>
+          <textarea class="textarea" id="f-request" placeholder="患者希望达到什么效果，例如：保留天然牙"></textarea>
+        </div>
+      </section>
+
+      <!-- 第 2 步：诊疗信息 -->
+      <section class="wizard-step" style="display: none;">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="f-diagnosis">诊断 *</label>
+            <input type="text" class="input" id="f-diagnosis" placeholder="例如：36 慢性根尖周炎" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="f-type">治疗类型</label>
+            <select class="select" id="f-type">
+              <option value="">请选择</option>
+              <option value="根管治疗">根管治疗</option>
+              <option value="种植修复">种植修复</option>
+              <option value="牙周治疗">牙周治疗</option>
+              <option value="龋病充填">龋病充填</option>
+              <option value="拔牙">拔牙</option>
+              <option value="美学修复">美学修复</option>
+              <option value="美白">美白</option>
+              <option value="修复">修复</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-history">现病史</label>
+          <textarea class="textarea" id="f-history" placeholder="症状、持续时间、诱因等"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-past">既往史 / 过敏史</label>
+          <textarea class="textarea" id="f-past" placeholder="系统性疾病、用药情况、过敏史"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-plan">治疗计划</label>
+          <textarea class="textarea" id="f-plan" placeholder="拟采用的诊疗方案与步骤"></textarea>
+        </div>
+      </section>
+
+      <!-- 第 3 步：影像资料（支持多图） -->
+      <section class="wizard-step" style="display: none;">
+        <div class="form-group">
+          <label class="form-label">术前影像 <span class="form-label__hint">可多选，支持 X 光片 / 口内照</span></label>
+          <label class="upload-label">
+            <span class="dropzone">
+              <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p class="mb-0">点击选择多张术前图片</p>
+              <span class="form-label__hint">支持 JPG / PNG，可一次选择多张</span>
+            </span>
+            <input type="file" id="upload-pre" accept="image/*" multiple hidden />
+          </label>
+          <div class="upload-grid" id="preview-pre"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">术中影像 <span class="form-label__hint">可多选，操作过程中留取</span></label>
+          <label class="upload-label">
+            <span class="dropzone">
+              <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p class="mb-0">点击选择多张术中图片</p>
+              <span class="form-label__hint">支持 JPG / PNG，可一次选择多张</span>
+            </span>
+            <input type="file" id="upload-during" accept="image/*" multiple hidden />
+          </label>
+          <div class="upload-grid" id="preview-during"></div>
+        </div>
+
+        <div class="form-group mb-0">
+          <label class="form-label">术后影像 <span class="form-label__hint">可多选，X 光片 / 内窥镜照</span></label>
+          <label class="upload-label">
+            <span class="dropzone">
+              <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p class="mb-0">点击选择多张术后图片</p>
+              <span class="form-label__hint">支持 JPG / PNG，可一次选择多张</span>
+            </span>
+            <input type="file" id="upload-post" accept="image/*" multiple hidden />
+          </label>
+          <div class="upload-grid" id="preview-post"></div>
+        </div>
+      </section>
+
+      <!-- 操作按钮 -->
+      <div class="wizard-actions">
+        <button class="btn btn--secondary" type="button" id="wizard-prev">上一步</button>
+        <button class="btn btn--primary" type="button" id="wizard-next">
+          下一步
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <style>
+    .dropzone {
+      border: 2px dashed var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 40px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--color-text-muted);
+      text-align: center;
+      background: var(--color-primary-subtle);
+      transition: border-color var(--transition-fast), background var(--transition-fast);
+      cursor: pointer;
+    }
+    .dropzone:hover {
+      border-color: var(--color-primary);
+      background: var(--color-primary-soft);
+      color: var(--color-text-sub);
+    }
+    .dropzone svg { color: var(--color-primary); }
+    .wizard-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--color-divider);
+    }
+  </style>
+
+  <script src="mock.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
