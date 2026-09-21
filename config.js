@@ -13,12 +13,15 @@
  */
 window.APP_CONFIG = {
   // ===== Supabase（数据库）=====
-  SUPABASE_URL: "", // 例如 "https://xxxx.supabase.co"
-  SUPABASE_ANON_KEY: "", // 例如 "eyJhbGciOi..."
+  SUPABASE_URL: "https://wpgxllhbftpjijmesswf.supabase.co", // 例如 "https://xxxx.supabase.co"
+  // 新版密钥体系用「Publishable key」（sb_publishable_...）：
+  // 控制台 → Settings → API Keys → 第一个标签页最上面那行，点复制。
+  // （旧概念叫 anon key；在旧页面 "Legacy anon, service_role" 标签里也能找到。）
+  SUPABASE_ANON_KEY: "sb_publishable_9LkRLSZz856voeapznYCqw_2Rd7h7dj", // 例如 "sb_publishable_..."
 
   // ===== Cloudinary（图片存储）=====
-  CLOUDINARY_CLOUD_NAME: "", // 例如 "dx7kq2abc"
-  CLOUDINARY_UPLOAD_PRESET: "" // 例如 "my_unsigned_preset"
+  CLOUDINARY_CLOUD_NAME: "trolahpr", // 例如 "dx7kq2abc"
+  CLOUDINARY_UPLOAD_PRESET: "Kyring" // 例如 "my_unsigned_preset"（必须是 Unsigned 免签名预设）
 
   // ===== 判定 =====
   // 三者都填了才视为云端模式；否则走本地模式。
