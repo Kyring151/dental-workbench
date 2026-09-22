@@ -1,20 +1,20 @@
 /**
- * 齿案台 · 云端数据层（端到端加密 + Cloudinary 图床）
+ * 齿案台 · 云端数据层（端到端加密 + Cloudinary）
  *
  * 在 config.js 填好 Cloudinary 后启用：
- *  - 图片上传 Cloudinary（国内可访问，大图不受限）
- *  - 病例数据端到端加密后存 JSONBin（免费、无需绑定账号级密钥进代码）
+ *  - 图片上传 Cloudinary image 资源（大图不受限）
+ *  - 病例数据端到端加密后存入 Cloudinary raw 文件 dental_vault.json
  *  - 「密码」就是加密钥匙：不设账号、不存服务器，云服务商也看不到内容
  *
  * 安全模型：
  *  - 密码经 PBKDF2(10万次) 派生 AES-256-GCM 密钥
  *  - 明文 JSON 先 gzip 压缩再加密，云端只保存 {salt, iv, data(密文)}
  *  - 解锁后密钥保存在 sessionStorage，关掉标签页即失效，重新输入密码
- *  - JSONBin 的 Master Key（云端钥匙）不写入公开代码，只在首次创建时
- *    由你输入，并保存在本地 vault / 同步码中；bin 内容为密文，
- *    即便 bin 公开也无法被他人解读
+ *  - 无需任何账号级密钥进代码；数据文件为密文，公开访问也无法被解读
  *
- * 换设备 / 清浏览器后，用「同步码」（含 binId + masterKey）绑定恢复。
+ * 换设备 / 清浏览器后，用「同步码」绑定恢复（仅含 cloud/preset/publicId）。
+ *
+ * 离线优先：本机快照兜底，云端在后台异步同步；网络抖动不丢数据、不卡界面。
  *
  * 未配置时：本文件不参与任何逻辑，工作台走原有 localStorage 模式。
  *
@@ -47,7 +47,9 @@
     return;
   }
 
-  const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
+  const DATA_PUBLIC_ID = "dental_vault";                 // 云端数据文件的固定 public_id
+  const READ_BASE = `https://res.cloudinary.com/${CFG.CLOUDINARY_CLOUD_NAME}/raw/upload`;
+  const UP_BASE = `https://api.cloudinary.com/v1_1/${CFG.CLOUDINARY_CLOUD_NAME}/raw/upload`;
   const LOCAL_VAULT_KEY = "dentalWorkbench.vault";       // 本机绑定记录
   const SESSION_KEY_KEY = "dentalWorkbench.sk";          // 会话密钥（关标签失效）
   const REMEMBER_KEY_KEY = "dentalWorkbench.rk";         // 持久密钥（勾选"记住本机"后跨会话有效）
@@ -126,62 +128,45 @@
     return JSON.parse(new TextDecoder().decode(packed));
   }
 
-  /* ---------------- JSONBin 读写 ---------------- */
+  /* ---------------- Cloudinary raw 数据读写 ---------------- */
 
-  /** 创建 bin：返回 {binId, masterKey}（vault 记录） */
-  async function binCreate(masterKey, envelope) {
-    const res = await fetch(JSONBIN_BASE, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Master-Key": masterKey,
-        "X-Bin-Private": "false",
-        "X-Bin-Name": "dental-workbench"
-      },
-      body: JSON.stringify(envelope)
-    });
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      throw new Error("云端创建失败（" + res.status + "）" + t.slice(0, 80));
-    }
-    const json = await res.json();
-    const binId = (json.metadata && json.metadata.id) || (json.record && json.record.binId);
-    if (!binId) throw new Error("云端返回数据异常，请检查 Master Key 是否正确");
-    return { binId, masterKey };
+  /** 首次创建云端库：把初始空信封（加密）写入固定 public_id */
+  async function binCreate(_ignored, envelope) {
+    await binWrite({ publicId: DATA_PUBLIC_ID, preset: CFG.CLOUDINARY_UPLOAD_PRESET }, envelope);
+    return { publicId: DATA_PUBLIC_ID, preset: CFG.CLOUDINARY_UPLOAD_PRESET };
   }
 
-  /** 读取 bin：返回信封对象（公开读取，无需鉴权）；8 秒超时防卡死 */
+  /** 读取数据信封（公开 GET）；尚未创建时返回 null；8 秒超时防卡死 */
   async function binRead(vault) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 8000);
+    const pid = (vault && vault.publicId) || DATA_PUBLIC_ID;
+    const url = `${READ_BASE}/${pid}${pid.includes(".") ? "" : ".json"}`;
     let res;
     try {
-      res = await fetch(`${JSONBIN_BASE}/${vault.binId}`, { signal: ctl.signal });
+      res = await fetch(url, { signal: ctl.signal });
     } catch (e) {
       clearTimeout(timer);
       throw new Error(e.name === "AbortError" ? "云端读取超时" : "云端读取失败（" + e.message + "）");
     }
     clearTimeout(timer);
+    if (res.status === 404 || res.status === 400) return null;   // 数据文件尚未创建
     if (!res.ok) throw new Error("云端读取失败（" + res.status + "）");
-    const json = await res.json();
-    return json.record || json;
+    return await res.json();
   }
 
-  /** 更新 bin：覆盖写入；8 秒超时防卡死 */
+  /** 覆盖写入数据信封（Cloudinary raw 上传：固定 public_id + overwrite） */
   async function binWrite(vault, envelope) {
+    const fd = new FormData();
+    fd.append("file", new Blob([JSON.stringify(envelope)], { type: "application/json" }), "vault.json");
+    fd.append("upload_preset", (vault && vault.preset) || CFG.CLOUDINARY_UPLOAD_PRESET);
+    fd.append("public_id", (vault && vault.publicId) || DATA_PUBLIC_ID);
+    fd.append("overwrite", "true");
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 8000);
     let res;
     try {
-      res = await fetch(`${JSONBIN_BASE}/${vault.binId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Master-Key": vault.masterKey
-        },
-        body: JSON.stringify(envelope),
-        signal: ctl.signal
-      });
+      res = await fetch(UP_BASE, { method: "POST", body: fd, signal: ctl.signal });
     } catch (e) {
       clearTimeout(timer);
       throw new Error(e.name === "AbortError" ? "云端保存超时" : "云端保存失败（" + e.message + "）");
@@ -189,7 +174,9 @@
     clearTimeout(timer);
     if (!res.ok) {
       const t = await res.text().catch(() => "");
-      throw new Error("云端保存失败（" + res.status + "）" + t.slice(0, 80));
+      const hint = /exists|overwrite/i.test(t)
+        ? "（Cloudinary 上传预设可能不允许覆盖同一数据文件，请在预设中允许 Overwrite）" : "";
+      throw new Error("云端保存失败（" + res.status + "）" + hint + " " + t.slice(0, 60));
     }
   }
 
@@ -219,6 +206,20 @@
     try { return JSON.parse(localStorage.getItem(LOCAL_VAULT_KEY)) || null; } catch { return null; }
   }
   function setLocalVault(v) { localStorage.setItem(LOCAL_VAULT_KEY, JSON.stringify(v)); }
+
+  /** 旧版（JSONBin）绑定检测：若本地只存有 binId（无 publicId）则视为未绑定，引导重新创建 */
+  function isLegacyVault() {
+    const v = getLocalVault();
+    return !!(v && v.binId && !v.publicId);
+  }
+  /** 把旧 JSONBin 的密钥备份到单独 key，防止重新创建时覆盖丢失（仅备份一次） */
+  function preserveLegacyVault() {
+    if (localStorage.getItem(LOCAL_VAULT_KEY + ".jsonbin")) return;
+    const v = getLocalVault();
+    if (v && v.binId && !v.publicId) {
+      localStorage.setItem(LOCAL_VAULT_KEY + ".jsonbin", JSON.stringify(v));
+    }
+  }
 
   async function sessionKeyToCryptoKey(b64) {
     return crypto.subtle.importKey("raw", b64ToBuf(b64), "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -353,29 +354,37 @@
     await unlockWithPassword(vault, password);
   }
 
-  /** 首次创建云端库：密码 + JSONBin Master Key */
-  async function signup(password, masterKey) {
+  /** 首次创建云端库：设密码即可（加密数据存在 Cloudinary 固定文件） */
+  async function signup(password) {
     if (getLocalVault()) throw new Error("本设备已绑定云端数据，请直接登录");
     const snap = buildSnapshot();
     const envelope = await encryptObject(snap, password);
-    const vault = await binCreate(masterKey, envelope);
+    const vault = await binCreate(null, envelope);
     setLocalVault(Object.assign(vault, { salt: envelope.salt }));
     await unlockWithPassword(vault, password);
   }
 
   /** 新设备绑定：密码 + 同步码 */
   async function bindVault(password, syncCode) {
-    let vault;
-    try { vault = JSON.parse(syncCode); } catch { throw new Error("同步码格式不正确"); }
-    if (!vault || !vault.binId || !vault.masterKey) {
+    let v;
+    try { v = JSON.parse(syncCode); } catch { throw new Error("同步码格式不正确"); }
+    if (!v || (!v.publicId && !v.binId)) {
       throw new Error("同步码不完整，请重新复制");
     }
+    const vault = {
+      publicId: v.publicId || DATA_PUBLIC_ID,
+      preset: v.preset || CFG.CLOUDINARY_UPLOAD_PRESET,
+      cloud: v.cloud || CFG.CLOUDINARY_CLOUD_NAME
+    };
     setLocalVault(vault);
     await unlockWithPassword(vault, password);
   }
 
   async function unlockWithPassword(vault, password) {
     const envelope = await binRead(vault);
+    if (!envelope || !envelope.salt) {
+      throw new Error("云端暂无数据，请先在主设备用同一密码创建云端库");
+    }
     const key = await deriveKey(password, b64ToBuf(envelope.salt));
     const plain = await crypto.subtle.decrypt(
       { name: "AES-GCM", iv: b64ToBuf(envelope.iv) },
@@ -413,10 +422,15 @@
     location.reload();
   }
 
-  /** 生成同步码文本（换设备时使用） */
+  /** 生成同步码文本（换设备时使用）：指向 Cloudinary 数据文件 */
   function getSyncCode() {
     const v = getLocalVault();
-    return v ? JSON.stringify({ binId: v.binId, masterKey: v.masterKey }) : "";
+    if (!v) return "";
+    return JSON.stringify({
+      cloud: v.cloud || CFG.CLOUDINARY_CLOUD_NAME,
+      preset: v.preset || CFG.CLOUDINARY_UPLOAD_PRESET,
+      publicId: v.publicId || DATA_PUBLIC_ID
+    });
   }
 
   /* ---------------- 图片上传（Cloudinary） ---------------- */
@@ -492,14 +506,9 @@
           <h2 style="margin:0;font-size:18px;color:#16324A;">解锁齿案台</h2>
           <p style="margin:6px 0 0;font-size:13px;color:#64748B;line-height:1.6;">数据已端到端加密上云，密码就是钥匙。<br/>输入密码解锁本设备数据。</p>
         </div>
-        <div id="lgNewBox" style="display:none;margin-bottom:12px;">
-          <label style="font-size:13px;color:#475569;display:block;margin-bottom:6px;">JSONBin Master Key（注册后从控制台复制，只首次创建需要）</label>
-          <textarea id="lgMasterKey" rows="2" placeholder="形如 \$2b\$10\$..." 
-            style="width:100%;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:13px;box-sizing:border-box;resize:vertical;"></textarea>
-        </div>
         <div id="lgSyncBox" style="display:none;margin-bottom:12px;">
           <label style="font-size:13px;color:#475569;display:block;margin-bottom:6px;">同步码（新设备绑定用）</label>
-          <textarea id="lgSyncCode" rows="3" placeholder='形如 {"binId":"...","masterKey":"..."}'
+          <textarea id="lgSyncCode" rows="3" placeholder='形如 {"cloud":"...","preset":"...","publicId":"..."}'
             style="width:100%;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:13px;box-sizing:border-box;resize:vertical;"></textarea>
         </div>
         <div style="margin-bottom:16px;">
@@ -524,33 +533,28 @@
     const linkEl = overlay.querySelector("#lgToggle");
     const btnEl = overlay.querySelector("#lgBtn");
     const errEl = overlay.querySelector("#lgError");
-    const newBox = overlay.querySelector("#lgNewBox");
     const syncBox = overlay.querySelector("#lgSyncBox");
-    const masterKey = overlay.querySelector("#lgMasterKey");
     const syncCode = overlay.querySelector("#lgSyncCode");
     const pwd = overlay.querySelector("#lgPassword");
 
-    const hasLocalVault = !!getLocalVault();
+    const hasLocalVault = !!getLocalVault() && !isLegacyVault();
 
     function updateMode() {
       if (!hasLocalVault) {
         if (!isNewDevice) {
           // 首次设置密码
           btnEl.textContent = "创建并解锁";
-          newBox.style.display = "block";
           syncBox.style.display = "none";
           linkEl.style.display = "block";
           linkEl.textContent = "已有云端数据？用同步码绑定这台设备";
         } else {
           btnEl.textContent = "绑定并解锁";
-          newBox.style.display = "none";
           syncBox.style.display = "block";
           linkEl.style.display = "block";
           linkEl.textContent = "返回首次设置";
         }
       } else {
         btnEl.textContent = "解 锁";
-        newBox.style.display = "none";
         syncBox.style.display = "none";
         linkEl.style.display = "none";
       }
@@ -580,12 +584,10 @@
           if (!code) throw new Error("请粘贴同步码，或返回首次设置");
           await bindVault(password, code);
         } else {
-          const mk = masterKey.value.trim();
-          if (!mk) throw new Error("请粘贴 JSONBin Master Key");
-          await signup(password, mk);
+          await signup(password);
           setTimeout(() => {
             alert(
-              "云端数据创建成功！\n\n这是你的同步码（含读写权限），请务必复制保存好：\n\n" +
+              "云端数据创建成功！\n\n这是你的同步码，请务必复制保存好：\n\n" +
               getSyncCode() + "\n\n换电脑 / 手机或清空浏览器时，用它在新设备上恢复数据。\n" +
               "注意：密码忘记无法找回，请牢记。"
             );
@@ -609,9 +611,10 @@
 
   async function init() {
     document.addEventListener("cloud:data-ready", () => location.reload());
+    preserveLegacyVault();
 
     // 会话中已有密钥（本会话已解锁过）→ 直接拉数据
-    if (getSessionKey()) {
+    if (getSessionKey() && !isLegacyVault()) {
       try {
         const vault = getLocalVault();
         if (vault) {

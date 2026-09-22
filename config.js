@@ -16,14 +16,12 @@
  * ⚠️ 密码忘记无法找回（数据是加密的）；同步码换设备时才用。
  */
 window.APP_CONFIG = {
-  // ===== Cloudinary（图片存储）=====
+  // ===== Cloudinary（图片 + 加密数据存储）=====
+  // 「数据」和「图片」都存 Cloudinary：
+  //  - 图片上传为 image 资源（大图不受限）
+  //  - 病例数据加密后存入一个固定 raw 文件 dental_vault.json（密码即钥匙）
   // Cloudinary 控制台 → Dashboard 看 Cloud name；Settings → Upload →
   // Upload presets 看预设名。预设必须设为「Unsigned 免签名」模式。
   CLOUDINARY_CLOUD_NAME: "trolahpr", // 例如 "dx7kq2abc"
   CLOUDINARY_UPLOAD_PRESET: "Kyring" // 例如 "my_unsigned_preset"（必须 Unsigned）
-
-  // ===== 数据存储 =====
-  // 无需配置。病例数据经 gzip 压缩 + AES-256 加密后存入 JSONBin
-  // （免费、国内可访问）。首次使用需注册 JSONBin 并粘贴 Master Key，
-  // 详见 SETUP_CLOUD.md。
 };
