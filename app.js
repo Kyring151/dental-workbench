@@ -421,6 +421,7 @@ let detailCase = null;
 let detailPhase = "pre";
 let galleryDragFrom = null;
 let detailImageId = null;
+let detailImageIndex = 0;
 
 const TYPE_BG = {
   xray: "var(--color-type-xray)",
@@ -691,6 +692,14 @@ function buildGallery() {
   const caption = images[0]?.caption || "";
 
   const countFor = (p) => (((detailCase.images || {})[p]) || []).length;
+  const selIdx = images.length ? Math.min(detailImageIndex, images.length - 1) : 0;
+  const navHtml = images.length > 1
+    ? `
+      <button class="gallery-arrow gallery-arrow--left" id="ga-prev" type="button" aria-label="上一张">‹</button>
+      <button class="gallery-arrow gallery-arrow--right" id="ga-next" type="button" aria-label="下一张">›</button>
+      <span class="gallery-counter" id="gallery-counter">${images.length > 0 ? selIdx + 1 + " / " + images.length : ""}</span>`
+    : "";
+
   const tabsHtml = ["pre", "during", "post"]
     .map(
       (p) => `
@@ -718,13 +727,14 @@ function buildGallery() {
 
     <div class="tabs" role="tablist" aria-label="影像阶段">${tabsHtml}</div>
 
-    <div class="gallery-viewer" aria-live="polite">
+    <div class="gallery-viewer">
       <figure class="main-image" id="main-image">
-        ${buildMainImage(images[0])}
+        ${buildMainImage(images[selIdx])}
       </figure>
+      ${navHtml}
     </div>
 
-    <div class="thumbnail-strip" id="thumbnail-gallery">${buildThumbs(images)}</div>
+    <div class="thumbnail-strip" id="thumbnail-gallery">${buildThumbs(images, selIdx)}</div>
 
     <div class="gallery-actions">
       <div class="gallery-actions__hint">
@@ -792,12 +802,13 @@ function buildMainImage(img) {
     <figcaption class="main-image__caption">${esc(img.caption || img.label || "")}</figcaption>`;
 }
 
-function buildThumbs(images) {
+function buildThumbs(images, activeIdx) {
+  const active = typeof activeIdx === "number" ? activeIdx : 0;
   return images
     .map(
       (img, i) => `
       <div class="thumb-wrap" data-idx="${i}" draggable="true">
-        <button class="thumbnail ${i === 0 ? "thumbnail--active" : ""}" data-index="${i}" aria-label="查看 ${esc(img.label || "")}">
+        <button class="thumbnail ${i === active ? "thumbnail--active" : ""}" data-index="${i}" aria-label="查看 ${esc(img.label || "")}">
           ${img.url ? `<img class="thumb-image" src="${img.url}" alt="" draggable="false"/>` : `<div class="thumbnail__placeholder" style="background:${TYPE_BG[img.type] || TYPE_BG.xray}"></div>`}
         </button>
         <span class="thumbnail__label" title="双击重命名">${esc(img.label || "")}</span>
@@ -806,6 +817,29 @@ function buildThumbs(images) {
       </div>`
     )
     .join("");
+}
+
+function setMainIndex(ni) {
+  const images = (detailCase.images || {})[detailPhase] || [];
+  if (!images.length) return;
+  ni = Math.max(0, Math.min(images.length - 1, ni));
+  detailImageIndex = ni;
+  const root = document.getElementById("gallery-root");
+  if (!root) return;
+  const main = root.querySelector("#main-image");
+  if (main) main.innerHTML = buildMainImage(images[ni]);
+  root.querySelectorAll(".thumbnail").forEach((x) => x.classList.toggle("thumbnail--active", Number(x.dataset.index) === ni));
+  const cc = root.querySelector("#gallery-counter");
+  if (cc) cc.textContent = (ni + 1) + " / " + images.length;
+}
+
+function stepMainIndex(dir) {
+  const images = (detailCase.images || {})[detailPhase] || [];
+  if (images.length < 2) return;
+  let ni = detailImageIndex + dir;
+  if (ni < 0) ni = images.length - 1;
+  if (ni >= images.length) ni = 0;
+  setMainIndex(ni);
 }
 
 function initGallery() {
@@ -821,18 +855,25 @@ function initGallery() {
 
   const thumbs = galleryRoot.querySelectorAll(".thumbnail");
   thumbs.forEach((th) => {
-    th.addEventListener("click", () => {
-      const images = (detailCase.images || {})[detailPhase] || [];
-      const idx = Number(th.dataset.index);
-      const img = images[idx];
-      if (!img) return;
-      const main = galleryRoot.querySelector("#main-image");
-      main.innerHTML = buildMainImage(img);
-      thumbs.forEach((x) => x.classList.remove("thumbnail--active"));
-      th.classList.add("thumbnail--active");
-      openLightbox(img, detailPhase, idx);
+    th.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setMainIndex(Number(th.dataset.index));
     });
   });
+
+  // 大图点击打开放大 + 标注
+  const mainImage = galleryRoot.querySelector("#main-image");
+  if (mainImage) {
+    mainImage.addEventListener("click", () => {
+      const images = (detailCase.images || {})[detailPhase] || [];
+      const img = images[detailImageIndex];
+      if (img) openLightbox(img, detailPhase, detailImageIndex);
+    });
+  }
+
+  // 大图左右切换
+  galleryRoot.querySelector("#ga-prev")?.addEventListener("click", () => stepMainIndex(-1));
+  galleryRoot.querySelector("#ga-next")?.addEventListener("click", () => stepMainIndex(1));
 
   // 删除 / 替换单张图片
   galleryRoot.querySelectorAll(".thumb-ctl").forEach((ctl) => {
@@ -1023,10 +1064,14 @@ function openCompare() {
     alert("需要「术前」和「术后」都至少有一张图片才能对比。");
     return;
   }
+  const preImg = pre[Math.min(detailImageIndex, pre.length - 1)];
+  const postImg = post[Math.min(detailImageIndex, post.length - 1)];
+  const preName = preImg.label || "术前" + (pre.indexOf(preImg) + 1);
+  const postName = postImg.label || "术后" + (post.indexOf(postImg) + 1);
   const shell = document.createElement("div");
   shell.setAttribute("style", "position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;");
   shell.innerHTML = `
-    <div style="color:#fff;font-weight:600;font-size:15px;">术前 ⊖ 术后：拖动滑杆对比</div>
+    <div style="color:#fff;font-weight:600;font-size:15px;text-align:center;">${esc(preName)}  ⊖  ${esc(postName)}<span style="color:#94A3B8;font-weight:400;margin-left:8px;">拖动滑杆对比</span></div>
     <div id="cmp-stage" style="position:relative;max-width:min(92vw,760px);width:100%;aspect-ratio:4/3;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);background:#000;">
       <div id="cmp-under" style="position:absolute;inset:0;background-repeat:no-repeat;background-size:cover;background-position:center;"></div>
       <div id="cmp-over" style="position:absolute;top:0;bottom:0;left:0;width:50%;overflow:hidden;background-repeat:no-repeat;background-size:cover;background-position:center;border-right:2px solid #fff;"></div>
@@ -1034,8 +1079,8 @@ function openCompare() {
     </div>
     <button type="button" id="cmp-close" style="padding:8px 22px;border:none;border-radius:10px;background:#0EA5E9;color:#fff;font-weight:600;cursor:pointer;">关闭</button>`;
   document.body.appendChild(shell);
-  shell.querySelector("#cmp-under").style.backgroundImage = "url(" + post[0].url + ")";
-  shell.querySelector("#cmp-over").style.backgroundImage = "url(" + pre[0].url + ")";
+  shell.querySelector("#cmp-under").style.backgroundImage = "url(" + postImg.url + ")";
+  shell.querySelector("#cmp-over").style.backgroundImage = "url(" + preImg.url + ")";
   const stage = shell.querySelector("#cmp-stage");
   const overDiv = shell.querySelector("#cmp-over");
   const handle = shell.querySelector("#cmp-handle");

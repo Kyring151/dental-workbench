@@ -1829,3 +1829,47 @@ img, svg {
 @media (pointer: coarse) {
   .gallery-actions { justify-content: center; }
 }
+
+/* 大图浏览：左右切换箭头 + 计数 */
+.gallery-viewer { position: relative; }
+.main-image { cursor: zoom-in; }
+.gallery-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 5;
+  backdrop-filter: blur(3px);
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.gallery-arrow:hover {
+  background: rgba(255, 255, 255, 0.42);
+  transform: translateY(-50%) scale(1.06);
+}
+.gallery-arrow--left { left: 12px; }
+.gallery-arrow--right { right: 12px; }
+.gallery-counter {
+  position: absolute;
+  bottom: 12px;
+  right: 14px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.55);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 5;
+  pointer-events: none;
+}
