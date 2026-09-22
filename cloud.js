@@ -279,8 +279,14 @@
     });
   }
 
-  /** 从云端拉取并解密，灌入 Storage（需已持有密钥）；云端不可达时回退本机快照 */
+  /** 从云端拉取并解密，灌入 Storage（需已持有密钥）。
+    离线优先：本机已有最新数据（内存或本机快照）时直接采用，避免被云端旧数据覆盖；
+    仅当本机无数据（新设备 / 清缓存）时才以云端为准。 */
   async function warmData() {
+    if (Array.isArray(memory.cases) && memory.cases.length > 0) return memory;
+    loadLocalSnapshot();
+    if (memory.cases.length > 0) return memory;
+
     const vault = getLocalVault();
     if (!vault) throw new Error("未绑定云端数据");
     let envelope;
