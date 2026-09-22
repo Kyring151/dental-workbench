@@ -150,24 +150,43 @@
     return { binId, masterKey };
   }
 
-  /** 读取 bin：返回信封对象（公开读取，无需鉴权） */
+  /** 读取 bin：返回信封对象（公开读取，无需鉴权）；8 秒超时防卡死 */
   async function binRead(vault) {
-    const res = await fetch(`${JSONBIN_BASE}/${vault.binId}`);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8000);
+    let res;
+    try {
+      res = await fetch(`${JSONBIN_BASE}/${vault.binId}`, { signal: ctl.signal });
+    } catch (e) {
+      clearTimeout(timer);
+      throw new Error(e.name === "AbortError" ? "云端读取超时" : "云端读取失败（" + e.message + "）");
+    }
+    clearTimeout(timer);
     if (!res.ok) throw new Error("云端读取失败（" + res.status + "）");
     const json = await res.json();
     return json.record || json;
   }
 
-  /** 更新 bin：覆盖写入 */
+  /** 更新 bin：覆盖写入；8 秒超时防卡死 */
   async function binWrite(vault, envelope) {
-    const res = await fetch(`${JSONBIN_BASE}/${vault.binId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Master-Key": vault.masterKey
-      },
-      body: JSON.stringify(envelope)
-    });
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8000);
+    let res;
+    try {
+      res = await fetch(`${JSONBIN_BASE}/${vault.binId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Master-Key": vault.masterKey
+        },
+        body: JSON.stringify(envelope),
+        signal: ctl.signal
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      throw new Error(e.name === "AbortError" ? "云端保存超时" : "云端保存失败（" + e.message + "）");
+    }
+    clearTimeout(timer);
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       throw new Error("云端保存失败（" + res.status + "）" + t.slice(0, 80));
@@ -252,19 +271,30 @@
     }, 400);
   }
 
-  /** 等待队列中所有写入完成；失败时向上抛出（供保存流程提示用户） */
+  /** 等待保存（离线优先）：数据已由本机快照落盘即成功；云端在后台异步同步，不阻塞界面 */
   async function flushWrite() {
     if (_writeTimer) { clearTimeout(_writeTimer); _writeTimer = null; }
-    _writeChain = _writeChain.then(doWrite);
-    await _writeChain;
+    _writeChain = _writeChain.then(doWrite).catch((e) => {
+      console.warn("云端暂不可用（数据已安全保存到本机，网络恢复后会自动同步）：", e && e.message);
+    });
   }
 
-  /** 从云端拉取并解密，灌入 Storage（需已持有密钥） */
+  /** 从云端拉取并解密，灌入 Storage（需已持有密钥）；云端不可达时回退本机快照 */
   async function warmData() {
     const vault = getLocalVault();
     if (!vault) throw new Error("未绑定云端数据");
-    const envelope = await binRead(vault);
-    if (!envelope || !envelope.data) { memory.cases = []; memory.profile = {}; return; }
+    let envelope;
+    try {
+      envelope = await binRead(vault);
+    } catch (e) {
+      console.warn("云端读取失败，改用本机快照兜底：", e && e.message);
+      loadLocalSnapshot();
+      return memory;
+    }
+    if (!envelope || !envelope.data) {
+      loadLocalSnapshot();
+      return memory;
+    }
     const key = getSessionKey()
       ? await sessionKeyToCryptoKey(getSessionKey())
       : _sessionCryptoKey;
@@ -277,6 +307,20 @@
     const obj = JSON.parse(new TextDecoder().decode(packed));
     memory.cases = Array.isArray(obj.cases) ? obj.cases : [];
     memory.profile = obj.profile || {};
+    return memory;
+  }
+
+  /** 用本机最近一份明文快照兜底（网络不可达时数据不丢） */
+  function loadLocalSnapshot() {
+    try {
+      const cases = JSON.parse(localStorage.getItem(Storage.KEY_CASES) || "[]");
+      const profile = JSON.parse(localStorage.getItem(Storage.KEY_PROFILE) || "{}");
+      memory.cases = Array.isArray(cases) ? cases : [];
+      memory.profile = profile || {};
+    } catch (e) {
+      memory.cases = [];
+      memory.profile = {};
+    }
     return memory;
   }
 
