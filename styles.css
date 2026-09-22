@@ -1614,3 +1614,121 @@ img, svg {
   text-align: center;
   padding: 24px 0;
 }
+
+/* ==========================================================
+   21. 质感打磨（自己看着舒服）
+   入口动效 / 悬停细节 / 按钮反馈 / 图表生长 / 空态精致化
+   ========================================================== */
+
+/* --- 入口淡入上浮 --- */
+@keyframes dwb-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.card, .stat-card, .filter-bar {
+  animation: dwb-fade-up var(--transition-slow) ease-out both;
+}
+
+.case-grid > .card:nth-child(2),
+.stat-grid > .stat-card:nth-child(2) { animation-delay: 0.03s; }
+.case-grid > .card:nth-child(3),
+.stat-grid > .stat-card:nth-child(3) { animation-delay: 0.06s; }
+.case-grid > .card:nth-child(4),
+.stat-grid > .stat-card:nth-child(4) { animation-delay: 0.09s; }
+.case-grid > .card:nth-child(n+5)     { animation-delay: 0.12s; }
+
+/* --- 卡片悬停 / 按压 --- */
+.card { border-color: var(--color-border); }
+.card--interactive { will-change: transform; }
+.card--interactive:hover {
+  transform: translateY(-4px);
+  border-color: var(--color-primary-soft);
+  box-shadow: 0 14px 32px rgba(2, 132, 199, 0.14);
+}
+.card--interactive:active { transform: translateY(-1px) scale(0.995); }
+
+/* --- 按钮按压缩放 --- */
+.btn { will-change: transform; }
+.btn:active { transform: scale(0.96); }
+
+/* --- 统计卡片：右上角光晕渐变 + 图标提亮 --- */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::after {
+  content: "";
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 70%);
+  pointer-events: none;
+}
+.stat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+.stat-card__icon { will-change: transform; transition: transform var(--transition-base); }
+.stat-card:hover .stat-card__icon { transform: scale(1.08) rotate(-4deg); }
+
+/* --- 图表生长动画 --- */
+@keyframes grow-bar-x { from { width: 0; } }
+@keyframes grow-bar-y { from { height: 0; } }
+.chart-row__bar { animation: grow-bar-x .8s var(--transition-base) both; }
+.bar-col__bar  { animation: grow-bar-y .8s var(--transition-base) both; }
+
+/* --- 空状态精致化：柔和渐变圆底 + 轻微浮动 --- */
+.empty-state__icon {
+  background: linear-gradient(135deg, var(--color-primary-soft), var(--color-purple-soft));
+  color: var(--color-primary);
+  box-shadow: 0 8px 20px rgba(14, 165, 233, 0.12);
+  animation: dwb-float 4s ease-in-out infinite;
+}
+@keyframes dwb-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+.empty-state__title { letter-spacing: 0.02em; }
+
+/* --- 顶部导航：激活项软胶囊 + 底部柔和渐变线 --- */
+.top-bar { border-bottom: 1px solid var(--color-divider); }
+.top-bar__inner::after {
+  content: "";
+  display: block;
+  height: 3px;
+  margin-top: -1px;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-purple), var(--color-teal));
+  border-radius: 2px;
+  opacity: 0.6;
+}
+.top-bar__nav .nav-link.active {
+  background: linear-gradient(135deg, var(--color-primary-soft), var(--color-purple-soft));
+  color: var(--color-primary);
+  border-radius: 9999px;
+}
+
+/* --- 输入框 / 下拉聚焦光晕 --- */
+.input, .textarea, select.input, .filter-chip, .view-toggle__btn {
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.input:focus, .textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+
+/* --- 文本选中 / 滚动条 --- */
+::selection { background: var(--color-primary-soft); color: var(--color-primary); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 8px;
+  border: 2px solid var(--color-bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+/* --- 动效开关：减少动态时关闭动画 --- */
+@media (prefers-reduced-motion: reduce) {
+  .card, .stat-card, .filter-bar { animation: none; }
+  .empty-state__icon, .chart-row__bar, .bar-col__bar { animation: none; }
+}
