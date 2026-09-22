@@ -226,7 +226,9 @@
     const text = JSON.stringify(snap);
     if (_lastSnapshot === text) return;              // 内容没变，跳过
     const vault = getLocalVault();
-    if (!vault || !_sessionCryptoKey) return;
+    if (!vault || !_sessionCryptoKey) {
+      throw new Error("未解锁云端数据，请先在解锁界面输入密码完成解锁后再保存");
+    }
     if (!vault.salt) throw new Error("缺少加密盐，请重新解锁");
     const iv = randomBytes(12);
     const jsonBytes = new TextEncoder().encode(text);
