@@ -851,9 +851,9 @@ function initNewCaseWizard() {
       post: uploadedImages.post
     };
 
-    // 云端模式：把图片真正上传到 Cloudinary；本地模式：直接用 base64
+    // 有 Cloudinary 图床：图片上传云端取直链（大图不受限）；否则用本地 base64（小图直存）
     const images =
-      window.CloudData && window.CloudData.isActive()
+      window.CloudData && window.CloudData.hasImageCloud()
         ? await uploadImagesCloud(rawImages)
         : { pre: rawImages.pre.slice(), during: rawImages.during.slice(), post: rawImages.post.slice() };
     if (!images) return;
@@ -881,23 +881,7 @@ function initNewCaseWizard() {
     };
 
     Storage.addCase(c);
-
-    // 云端模式下等待该病例真正写入云端后再跳转详情页
-    if (window.CloudData && window.CloudData.isActive()) {
-      try {
-        await window.CloudData.awaitSaved(c.id);
-        clearDraft();
-      } catch (e) {
-        // 写云失败：回滚内存里的新病例、保留草稿，明确提示，不要静默跳转
-        try { Storage.setCases((Storage._cases || []).filter((x) => x.id !== c.id)); } catch (_) {}
-        alert("保存失败：" + (e && e.message ? e.message : "请检查网络后重试") + "\n\n草稿已保留，你可以稍后重试。");
-        btnNext.disabled = false;
-        btnNext.textContent = "保存病例";
-        return;
-      }
-    } else {
-      clearDraft();
-    }
+    clearDraft();
 
     location.href = "case-detail.html?id=" + c.id;
   }
@@ -928,12 +912,8 @@ function initNewCaseWizard() {
 async function init() {
   initNavigation();
 
-  // 云端模式：等待 CloudData 就绪（可能弹出登录浮层）；本地模式直接灌入缓存
-  if (window.CloudData && window.CloudData.isActive()) {
-    await window.CloudData.ready;
-  } else {
-    Storage.hydrateFromLocal();
-  }
+  // 单机模式：直接灌入本地缓存
+  Storage.hydrateFromLocal();
 
   initProfile();
   renderDashboardStats();

@@ -17,21 +17,12 @@ const Storage = {
 
   /* ---- 持久化分发 ---- */
   _persist() {
-    // 始终先写本机明文快照：云模式也保留本地副本，网络抖动/云端不可达时离线兜底、数据不丢
+    // 单机模式：数据一律写本机 localStorage；图片只存 URL（大图在 Cloudinary）
     try {
       localStorage.setItem(Storage.KEY_CASES, JSON.stringify(this._cases));
       localStorage.setItem(Storage.KEY_PROFILE, JSON.stringify(this._profile));
     } catch (e) {
-      if (!(window.CloudData && window.CloudData.isActive())) {
-        alert("本地存储空间不足，可能是图片过大过多。请删除部分大图后重试。");
-      } else {
-        console.warn("本机快照写入失败", e);
-      }
-    }
-    if (window.CloudData && window.CloudData.isActive()) {
-      window.CloudData.replaceAll(this._cases);
-      window.CloudData.saveProfile(this._profile);
-      return;
+      alert("本地存储空间不足，请删除部分大图后重试。");
     }
   },
 
