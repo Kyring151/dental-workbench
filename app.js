@@ -690,10 +690,14 @@ function buildGallery() {
   const images = (detailCase.images || {})[detailPhase] || [];
   const caption = images[0]?.caption || "";
 
+  const countFor = (p) => (((detailCase.images || {})[p]) || []).length;
   const tabsHtml = ["pre", "during", "post"]
     .map(
       (p) => `
-      <button class="tab ${p === detailPhase ? "tab--active" : ""}" role="tab" aria-selected="${p === detailPhase}" data-phase="${p}">${PHASE_LABEL[p]}</button>`
+      <button class="tab ${p === detailPhase ? "tab--active" : ""}" role="tab" aria-selected="${p === detailPhase}" data-phase="${p}">
+        <span class="tab__label">${PHASE_LABEL[p]}</span>
+        <span class="tab__count">${countFor(p)}</span>
+      </button>`
     )
     .join("");
 
@@ -723,10 +727,21 @@ function buildGallery() {
     <div class="thumbnail-strip" id="thumbnail-gallery">${buildThumbs(images)}</div>
 
     <div class="gallery-actions">
-      <label class="btn btn--ghost btn--sm" for="gallery-add">＋ 新增图片</label>
-      <input type="file" id="gallery-add" accept="image/*" multiple style="display:none" />
-      <button class="btn btn--ghost btn--sm" type="button" id="gallery-compare">术前 ⊖ 术后 对比</button>
-      <span class="gallery-hint">双击名称可重命名 · 拖拽调顺序 · 右上×删除 · 左下⇄替换</span>
+      <div class="gallery-actions__hint">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        双击名称重命名 · 拖拽调顺序 · 右上×删除 · 左下⇄替换
+      </div>
+      <div class="gallery-actions__btns">
+        <label class="btn btn--ghost btn--sm" for="gallery-add">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          新增图片
+        </label>
+        <input type="file" id="gallery-add" accept="image/*" multiple style="display:none" />
+        <button class="btn btn--ghost btn--sm" type="button" id="gallery-compare">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M16 3v18M4 6l4 4M20 18l-4-4"/></svg>
+          术前↔术后 对比
+        </button>
+      </div>
     </div>
   `;
 
@@ -749,7 +764,10 @@ function buildGallery() {
           <p class="empty-state__text">可在下方为该阶段补充图片。</p>
         </div>
         <div class="gallery-actions">
-          <label class="btn btn--ghost btn--sm" for="gallery-add">＋ 新增图片</label>
+          <label class="btn btn--ghost btn--sm" for="gallery-add">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            新增图片
+          </label>
           <input type="file" id="gallery-add" accept="image/*" multiple style="display:none" />
         </div>
       </div>
