@@ -726,7 +726,7 @@ function buildGallery() {
       <label class="btn btn--ghost btn--sm" for="gallery-add">＋ 新增图片</label>
       <input type="file" id="gallery-add" accept="image/*" multiple style="display:none" />
       <button class="btn btn--ghost btn--sm" type="button" id="gallery-compare">术前 ⊖ 术后 对比</button>
-      <span class="gallery-hint">拖拽缩略图调顺序 · 右上×删除 · 左下⇄替换</span>
+      <span class="gallery-hint">双击名称可重命名 · 拖拽调顺序 · 右上×删除 · 左下⇄替换</span>
     </div>
   `;
 
@@ -781,8 +781,8 @@ function buildThumbs(images) {
       <div class="thumb-wrap" data-idx="${i}" draggable="true">
         <button class="thumbnail ${i === 0 ? "thumbnail--active" : ""}" data-index="${i}" aria-label="查看 ${esc(img.label || "")}">
           ${img.url ? `<img class="thumb-image" src="${img.url}" alt="" draggable="false"/>` : `<div class="thumbnail__placeholder" style="background:${TYPE_BG[img.type] || TYPE_BG.xray}"></div>`}
-          <span class="thumbnail__label">${esc(img.label || "")}</span>
         </button>
+        <span class="thumbnail__label" title="双击重命名">${esc(img.label || "")}</span>
         <button class="thumb-ctl thumb-ctl--replace" data-act="replace" data-index="${i}" title="替换" aria-label="替换这张图片">⇄</button>
         <button class="thumb-ctl thumb-ctl--delete" data-act="del" data-index="${i}" title="删除" aria-label="删除这张图片">×</button>
       </div>`
@@ -861,6 +861,14 @@ function initGallery() {
       galleryDragFrom = null;
     });
   }
+
+  // 双击图片名称重命名
+  galleryRoot.querySelectorAll(".thumbnail__label").forEach((label) => {
+    const wrap = label.closest(".thumb-wrap");
+    if (!wrap) return;
+    const idx = Number(wrap.dataset.idx);
+    label.addEventListener("dblclick", () => startRenameLabel(detailPhase, idx, label));
+  });
 
   // 新增图片（当前阶段）
   const addInput = galleryRoot.querySelector("#gallery-add");
@@ -951,6 +959,42 @@ function reorderPhaseImage(phase, from, to) {
   list.splice(to, 0, moved);
   Storage.updateCase(detailCase.id, { images: detailCase.images });
   renderDetail();
+}
+
+function startRenameLabel(phase, idx, labelEl) {
+  if (!detailCase) return;
+  const list = (detailCase.images || {})[phase] || [];
+  if (idx < 0 || idx >= list.length) return;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "thumb-label-input";
+  input.value = list[idx].label || "";
+  input.maxLength = 30;
+  input.setAttribute("aria-label", "图片名称");
+  labelEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    const v = input.value.trim();
+    list[idx].label = v;
+    Storage.updateCase(detailCase.id, { images: detailCase.images });
+    renderDetail();
+  };
+  const cancel = () => {
+    if (done) return;
+    done = true;
+    renderDetail();
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { commit(); input.blur(); }
+    if (e.key === "Escape") { done = true; renderDetail(); }
+  });
 }
 
 /* ---- 术前术后对比滑杆 ---- */
