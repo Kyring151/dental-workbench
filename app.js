@@ -881,11 +881,22 @@ function initNewCaseWizard() {
     };
 
     Storage.addCase(c);
-    clearDraft();
 
     // 云端模式下等待该病例真正写入云端后再跳转详情页
     if (window.CloudData && window.CloudData.isActive()) {
-      await window.CloudData.awaitSaved(c.id);
+      try {
+        await window.CloudData.awaitSaved(c.id);
+        clearDraft();
+      } catch (e) {
+        // 写云失败：回滚内存里的新病例、保留草稿，明确提示，不要静默跳转
+        try { Storage.setCases((Storage._cases || []).filter((x) => x.id !== c.id)); } catch (_) {}
+        alert("保存失败：" + (e && e.message ? e.message : "请检查网络后重试") + "\n\n草稿已保留，你可以稍后重试。");
+        btnNext.disabled = false;
+        btnNext.textContent = "保存病例";
+        return;
+      }
+    } else {
+      clearDraft();
     }
 
     location.href = "case-detail.html?id=" + c.id;

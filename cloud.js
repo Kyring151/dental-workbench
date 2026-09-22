@@ -231,7 +231,7 @@
     const iv = randomBytes(12);
     const jsonBytes = new TextEncoder().encode(text);
     const packed = await gzip(jsonBytes);
-    const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: _sessionCryptoKey }, packed);
+    const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, _sessionCryptoKey, packed);
     const envelope = {
       salt: vault.salt,
       iv: bufToB64(iv),
@@ -250,11 +250,11 @@
     }, 400);
   }
 
-  /** 等待队列中所有写入完成 */
+  /** 等待队列中所有写入完成；失败时向上抛出（供保存流程提示用户） */
   async function flushWrite() {
     if (_writeTimer) { clearTimeout(_writeTimer); _writeTimer = null; }
-    _writeChain = _writeChain.then(doWrite).catch((e) => console.error("云端写入失败：", e));
-    await _writeChain.catch(() => {});
+    _writeChain = _writeChain.then(doWrite);
+    await _writeChain;
   }
 
   /** 从云端拉取并解密，灌入 Storage（需已持有密钥） */
