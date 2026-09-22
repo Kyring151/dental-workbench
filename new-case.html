@@ -6,7 +6,30 @@
   <meta name="description" content="口腔患者病例工作台 · 新建病例" />
   <title>新建病例 · 齿案台</title>
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
-  <link rel="stylesheet" href="styles.css" />
+  <script>
+  window.APP_VERSION = "20260922-1";
+  (function () {
+    var V = window.APP_VERSION;
+    function v(u) { return u + (u.indexOf("?") >= 0 ? "&" : "?") + "v=" + V; }
+    var h = document.head;
+    var l = document.createElement("link"); l.rel = "stylesheet"; l.href = v("styles.css"); h.appendChild(l);
+    var q = ["config.js", "mock.js", "cloud.js", "app.js"];
+    (function boot(i) { if (i >= q.length) return; var s = document.createElement("script"); s.src = v(q[i]); s.onload = function () { boot(i + 1); }; s.onerror = function () { boot(i + 1); }; h.appendChild(s); })(0);
+    fetch("version.txt?t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.text() : ""; })
+      .then(function (t) {
+        var remote = (t || "").trim();
+        if (!remote || remote === V || sessionStorage.getItem("dwb-notified") === remote) return;
+        sessionStorage.setItem("dwb-notified", remote);
+        var bar = document.createElement("div");
+        bar.setAttribute("style", "position:fixed;left:0;right:0;bottom:0;z-index:20000;background:#0EA5E9;color:#fff;padding:10px 16px;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 -4px 20px rgba(2,132,199,.3);");
+        bar.innerHTML = "<span>检测到新版本（" + remote + "），刷新后即可使用最新版</span><button type='button' style='flex-shrink:0;background:#fff;color:#0284C7;border:none;border-radius:8px;padding:6px 14px;font-weight:600;cursor:pointer;'>立即刷新</button>";
+        bar.querySelector("button").onclick = function () { location.reload(); };
+        document.body.appendChild(bar);
+      })
+      .catch(function () {});
+  })();
+  </script>
 </head>
 <body data-page="new-case">
 
@@ -261,9 +284,5 @@
     }
   </style>
 
-  <script src="config.js"></script>
-    <script src="mock.js"></script>
-  <script src="cloud.js"></script>
-  <script src="app.js"></script>
 </body>
 </html>
