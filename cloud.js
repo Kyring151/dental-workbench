@@ -1,25 +1,29 @@
 /**
- * 齿案台 · 云端数据层（Supabase + Cloudinary）
+ * 齿案台 · 云端数据层（LeanCloud 国内版）
  *
- * 在 config.js 填好密钥后启用：
- *  - 病例数据读写 Supabase 云数据库（含登录鉴权 + RLS 行级安全）
- *  - 图片上传 Cloudinary 图床，返回远程 URL
+ * 在 config.js 填好 App ID / App Key 后启用：
+ *  - 病例数据 + 用户账号 走 LeanCloud 云数据库
+ *  - 图片上传 LeanCloud 文件存储（国内 CDN，速度快）
+ *  - 每个数据对象设置 ACL：只允许创建它的账号读写（安全隔离）
  *
  * 未配置时：本文件不参与任何逻辑，工作台走原有 localStorage 模式，
  * 保证线上环境不被破坏、可离线正常使用。
  *
- * 依赖：config.js（window.APP_CONFIG）+ Supabase JS CDN（window.supabase）
- *       + mock.js（Storage，暴露 hydrateFromLocal / 供本文件灌入数据）
+ * 依赖：config.js（window.APP_CONFIG）+ vendor/av-min.js（window.AV）
+ *       + mock.js（Storage，暴露 _cases / _profile / mode 供灌入数据）
+ *
+ * 对外接口（与页面其它代码的约定，保持不变）：
+ *   active / isActive() / ready / login / signup / logout / warmData /
+ *   replaceAll / awaitSaved / saveProfile / uploadImage
  */
 (function () {
   const CFG = window.APP_CONFIG || {};
 
   const isConfigured =
-    CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY &&
-    CFG.CLOUDINARY_CLOUD_NAME && CFG.CLOUDINARY_UPLOAD_PRESET;
+    CFG.LEANCLOUD_APP_ID && CFG.LEANCLOUD_APP_KEY;
 
-  if (!isConfigured) {
-    // 本地模式：无需任何云逻辑
+  /** 未配置 / SDK 未加载时的空实现（本地模式） */
+  function fallback() {
     window.CloudData = {
       active: false,
       isActive: function () { return false; },
@@ -27,28 +31,36 @@
       login: async function () { throw new Error("本地模式，无登录功能"); },
       logout: function () {},
       replaceAll: function () {},
-      saveProfile: function () {}
+      saveProfile: function () {},
+      uploadImage: async function () { throw new Error("本地模式，无图片上传"); }
     };
+  }
+
+  if (!isConfigured || !window.AV) {
+    if (!isConfigured) {
+      // 静默退回本地模式
+    } else {
+      console.error("未加载 LeanCloud SDK，退回本地模式。");
+    }
+    fallback();
     return;
   }
 
-  /** 已配置时创建 Supabase 客户端 */
-  const supabase = (window.supabase || {}).createClient
-    ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY)
-    : null;
-
-  if (!supabase) {
-    console.error("未加载 Supabase 客户端，退回本地模式。");
-    window.CloudData = {
-      active: false, isActive: function () { return false; }, ready: Promise.resolve(),
-      login: async function () { throw new Error("Supabase 客户端未加载"); },
-      logout: function () {}, replaceAll: function () {}, saveProfile: function () {}
-    };
+  const AV = window.AV;
+  try {
+    AV.init({
+      appId: CFG.LEANCLOUD_APP_ID,
+      appKey: CFG.LEANCLOUD_APP_KEY,
+      serverURLs: CFG.LEANCLOUD_SERVER_URLS || undefined
+    });
+  } catch (e) {
+    console.error("LeanCloud 初始化失败，退回本地模式。", e);
+    fallback();
     return;
   }
 
   /** 已在内存中完成的热数据缓存，供 Storage 同步读取 */
-  const memory = {};
+  const memory = { cases: [], profile: {} };
 
   /** 关闭任何正在展示的登录浮层 */
   function dismissLogin() {
@@ -58,38 +70,53 @@
 
   /** 拉取当前登录用户的数据（cases + profile）灌入内存 */
   async function warmData() {
-    const { data: rows } = await supabase
-      .from("cases")
-      .select("payload")
-      .order("created_at", { ascending: true });
+    const q = new AV.Query("Case");
+    q.limit(1000);
+    q.ascending("createdAt");
+    const objs = await q.find();
 
-    memory.cases = (rows || [])
-      .map((r) => r.payload)
+    memory.cases = objs
+      .map((o) => o.get("payload"))
       .filter(Boolean)
-      .sort((a, b) => (b.updatedAt || b.visitDate || "") < (a.updatedAt || a.visitDate || "") ? 1 : -1);
+      .sort((a, b) => ((b.updatedAt || b.visitDate || "") < (a.updatedAt || a.visitDate || "") ? 1 : -1));
 
-    const { data: profRows } = await supabase
-      .from("profiles")
-      .select("*")
-      .limit(1);
-
-    const prof = (profRows || [])[0] || {};
-    memory.profile = { surname: prof.surname || "" };
+    const qp = new AV.Query("Profile");
+    qp.limit(1);
+    const profs = await qp.find();
+    memory.profile = { surname: (profs[0] && profs[0].get("surname")) || "" };
   }
 
   /** 记录每个病例最近一次的云端写入 promise，供 awaitSaved 等待 */
   const _pending = {};
 
-  /** 异步把内存中的全部病例回写云端（增量 upsert，按 id 主键） */
+  /** 异步把内存中的全部病例回写云端（全量同步：增量 upsert + 删除云端多余的） */
   function replaceAll(items) {
-    (items || []).forEach((c) => {
-      if (!c || !c.id) return;
-      const p = supabase
-        .from("cases")
-        .upsert({ id: c.id, payload: c, updated_at: new Date().toISOString() })
-        .then(({ error }) => { if (error) console.error("云端保存病例失败：", error); });
-      _pending[c.id] = p;
-    });
+    if (!AV.User.current()) return;
+    const list = items || [];
+    new AV.Query("Case").limit(1000).find().then((objs) => {
+      const byId = {};
+      objs.forEach((o) => { byId[o.get("cid")] = o; });
+
+      list.forEach((c) => {
+        if (!c || !c.id) return;
+        const obj = byId[c.id] || new AV.Object("Case");
+        if (!byId[c.id]) obj.setACL(new AV.ACL(AV.User.current()));
+        obj.set("cid", c.id);
+        obj.set("payload", c);
+        const p = obj.save().then(
+          () => {},
+          (err) => console.error("云端保存病例失败：", err)
+        );
+        _pending[c.id] = p;
+      });
+
+      objs.forEach((o) => {
+        const cid = o.get("cid");
+        if (cid && !list.some((c) => c && c.id === cid)) {
+          o.destroy().catch((err) => console.error("云端删除病例失败：", err));
+        }
+      });
+    }).catch((err) => console.error("云端同步失败：", err));
   }
 
   /** 等待某个病例的云端写入完成（用于保存后跳转详情页前） */
@@ -98,26 +125,34 @@
   }
 
   function persistProfile(p) {
-    supabase
-      .from("profiles")
-      .upsert({ user_id: supabase.auth.user?.().id, surname: p.surname || "" })
-      .then(({ error }) => { if (error) console.error("云端保存资料失败：", error); });
+    if (!AV.User.current()) return;
+    new AV.Query("Profile").limit(1).find().then((rows) => {
+      const obj = rows[0] || new AV.Object("Profile");
+      if (!rows[0]) obj.setACL(new AV.ACL(AV.User.current()));
+      obj.set("surname", p.surname || "");
+      return obj.save();
+    }).catch((err) => console.error("云端保存资料失败：", err));
   }
 
   async function login(email, password) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    const user = await AV.User.logIn(email.trim(), password);
+    if (!user) throw new Error("登录失败");
     await confirmSession();
   }
 
   async function signup(email, password) {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
+    // 用邮箱作为唯一用户名注册；注册成功即自动登录
+    const user = await AV.User.signUp({
+      username: email.trim(),
+      email: email.trim(),
+      password: password
+    });
+    if (!user) throw new Error("注册失败");
     await confirmSession();
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    AV.User.logOut();
     memory.cases = [];
     memory.profile = {};
     if (window.Storage) {
@@ -155,7 +190,6 @@
     }
     ensureLogoutButton();
     dismissLogin();
-    // 通知 app.js 重新渲染
     document.dispatchEvent(new CustomEvent("cloud:data-ready"));
   }
 
@@ -217,13 +251,21 @@
       try {
         if (isSignup) {
           await signup(email, password);
-          errEl.textContent = "注册成功！请用新账号登录一次以同步。" ;
-          isSignup = false;
         } else {
           await login(email, password);
         }
       } catch (ex) {
-        errEl.textContent = (ex && ex.message) || "登录失败，请重试";
+        const m = (ex && ex.message) || "登录失败，请重试";
+        // LeanCloud 错误信息是英文，给常见情况翻译成中文提示
+        if (/202/.test(m) || /already taken|duplicate/i.test(m)) {
+          errEl.textContent = "该邮箱已注册，请直接登录";
+        } else if (/216|wrong password|invalid username/i.test(m)) {
+          errEl.textContent = "邮箱或密码不正确";
+        } else if (/219|too many|rate/i.test(m)) {
+          errEl.textContent = "操作太频繁，请稍后再试";
+        } else {
+          errEl.textContent = m;
+        }
       } finally {
         btnEl.disabled = false;
         btnEl.textContent = isSignup ? "注 册" : "登 录";
@@ -231,14 +273,11 @@
     });
   }
 
-  /** 顶层 init：恢复会话；未登录则弹出登录浮层 */
+  /** 顶层 init：检查登录态；未登录则弹出登录浮层 */
   async function init() {
-    const saved = await supabase.auth.getSession();
-    const user = saved?.data?.session?.user || (supabase.auth.user ? supabase.auth.user() : null);
-
     document.addEventListener("cloud:data-ready", () => location.reload());
 
-    if (!user) {
+    if (!AV.User.current()) {
       // 未登录：展示登录浮层；数据仍走内存空缓存
       window.Storage._cases = [];
       window.Storage.mode = "cloud";
@@ -269,21 +308,12 @@
     return new Blob([arr], { type: meta });
   }
 
-  /** 把一张 base64 图片上传到 Cloudinary，返回远程 URL（受上传预设限额约束） */
+  /** 把一张 base64 图片上传到 LeanCloud 文件存储，返回远程 URL */
   async function uploadImage(dataUrl) {
-    const fd = new FormData();
-    fd.append("file", dataURLtoBlob(dataUrl));
-    fd.append("upload_preset", CFG.CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${CFG.CLOUDINARY_CLOUD_NAME}/image/upload`,
-      { method: "POST", body: fd }
-    );
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      throw new Error("图片上传失败（" + res.status + (t ? " " + t.slice(0, 80) : "") + "）");
-    }
-    const json = await res.json();
-    return json.secure_url || json.url;
+    const blob = dataURLtoBlob(dataUrl);
+    const file = AV.File.fromBlob("photo-" + Date.now() + "." + (blob.type.split("/")[1] || "jpg"), blob);
+    await file.save();
+    return file.url();
   }
 
   window.CloudData = {
