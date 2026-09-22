@@ -49,7 +49,8 @@
 
   const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
   const LOCAL_VAULT_KEY = "dentalWorkbench.vault";       // 本机绑定记录
-  const SESSION_KEY_KEY = "dentalWorkbench.sk";          // 会话密钥
+  const SESSION_KEY_KEY = "dentalWorkbench.sk";          // 会话密钥（关标签失效）
+  const REMEMBER_KEY_KEY = "dentalWorkbench.rk";         // 持久密钥（勾选"记住本机"后跨会话有效）
 
   /* ---------------- 加密 / 压缩工具 ---------------- */
 
@@ -175,9 +176,25 @@
 
   /* ---------------- 状态 ---------------- */
 
-  function getSessionKey() { return sessionStorage.getItem(SESSION_KEY_KEY) || ""; }
-  function setSessionKey(b64) { sessionStorage.setItem(SESSION_KEY_KEY, b64); }
-  function clearSessionKey() { sessionStorage.removeItem(SESSION_KEY_KEY); }
+  // 会话密钥：默认关掉标签页即失效（sessionStorage）；
+  // 勾选"记住本机"后持久化到 localStorage，重新打开浏览器也能直接进首页。
+  let _rememberChoice = false; // 本次解锁是否记住本机
+  function getSessionKey() {
+    return localStorage.getItem(REMEMBER_KEY_KEY) || sessionStorage.getItem(SESSION_KEY_KEY) || "";
+  }
+  function setSessionKey(b64, remember) {
+    if (remember) {
+      localStorage.setItem(REMEMBER_KEY_KEY, b64);
+      sessionStorage.removeItem(SESSION_KEY_KEY);
+    } else {
+      sessionStorage.setItem(SESSION_KEY_KEY, b64);
+      localStorage.removeItem(REMEMBER_KEY_KEY);
+    }
+  }
+  function clearSessionKey() {
+    sessionStorage.removeItem(SESSION_KEY_KEY);
+    localStorage.removeItem(REMEMBER_KEY_KEY);
+  }
 
   function getLocalVault() {
     try { return JSON.parse(localStorage.getItem(LOCAL_VAULT_KEY)) || null; } catch { return null; }
@@ -322,7 +339,7 @@
     setLocalVault(Object.assign({}, vault, { salt: envelope.salt }));
 
     _sessionCryptoKey = key;
-    setSessionKey(bufToB64(await crypto.subtle.exportKey("raw", key)));
+    setSessionKey(bufToB64(await crypto.subtle.exportKey("raw", key)), _rememberChoice);
     confirmLoaded();
   }
 
@@ -438,6 +455,10 @@
           <input type="password" id="lgPassword" required placeholder="至少 6 位"
             style="width:100%;padding:11px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;box-sizing:border-box;"/>
         </div>
+        <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;">
+          <input type="checkbox" id="lgRemember" style="width:16px;height:16px;accent-color:#0EA5E9;flex:none;"/>
+          <label for="lgRemember" style="cursor:pointer;">记住本机，下次打开直接进入</label>
+        </div>
         <p id="lgError" style="color:#DC2626;font-size:13px;margin:0 0 10px;min-height:18px;line-height:1.5;"></p>
         <button type="submit" id="lgBtn" style="width:100%;padding:12px;border:none;border-radius:10px;background:linear-gradient(135deg,#0EA5E9,#8B5CF6);color:#fff;font-size:15px;font-weight:600;cursor:pointer;">解 锁</button>
         <p style="text-align:center;margin:14px 0 0;font-size:13px;color:#64748B;line-height:1.7;">
@@ -494,6 +515,7 @@
     overlay.querySelector("#cloudLoginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const password = pwd.value;
+      _rememberChoice = overlay.querySelector("#lgRemember").checked;
       errEl.textContent = "";
       btnEl.disabled = true;
       btnEl.textContent = "处理中…";
