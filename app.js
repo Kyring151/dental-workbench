@@ -419,6 +419,7 @@ function initDataTransfer() {
    ========================================================== */
 let detailCase = null;
 let detailPhase = "pre";
+let galleryDragFrom = null;
 let detailImageId = null;
 
 const TYPE_BG = {
@@ -725,7 +726,7 @@ function buildGallery() {
       <label class="btn btn--ghost btn--sm" for="gallery-add">＋ 新增图片</label>
       <input type="file" id="gallery-add" accept="image/*" multiple style="display:none" />
       <button class="btn btn--ghost btn--sm" type="button" id="gallery-compare">术前 ⊖ 术后 对比</button>
-      <span class="gallery-hint">缩略图右上 ×删除、左下 ⇄替换图片</span>
+      <span class="gallery-hint">拖拽缩略图调顺序 · 右上×删除 · 左下⇄替换</span>
     </div>
   `;
 
@@ -777,9 +778,9 @@ function buildThumbs(images) {
   return images
     .map(
       (img, i) => `
-      <div class="thumb-wrap" data-idx="${i}">
+      <div class="thumb-wrap" data-idx="${i}" draggable="true">
         <button class="thumbnail ${i === 0 ? "thumbnail--active" : ""}" data-index="${i}" aria-label="查看 ${esc(img.label || "")}">
-          ${img.url ? `<img class="thumb-image" src="${img.url}" alt=""/>` : `<div class="thumbnail__placeholder" style="background:${TYPE_BG[img.type] || TYPE_BG.xray}"></div>`}
+          ${img.url ? `<img class="thumb-image" src="${img.url}" alt="" draggable="false"/>` : `<div class="thumbnail__placeholder" style="background:${TYPE_BG[img.type] || TYPE_BG.xray}"></div>`}
           <span class="thumbnail__label">${esc(img.label || "")}</span>
         </button>
         <button class="thumb-ctl thumb-ctl--replace" data-act="replace" data-index="${i}" title="替换" aria-label="替换这张图片">⇄</button>
@@ -827,6 +828,39 @@ function initGallery() {
       }
     });
   });
+
+  // 拖拽调整缩略图顺序
+  const strip = galleryRoot.querySelector("#thumbnail-gallery");
+  if (strip) {
+    strip.addEventListener("dragstart", (e) => {
+      const w = e.target.closest(".thumb-wrap");
+      if (!w) return;
+      galleryDragFrom = Number(w.dataset.idx);
+      w.classList.add("thumb-wrap--dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    strip.addEventListener("dragend", (e) => {
+      const w = e.target.closest(".thumb-wrap");
+      if (w) w.classList.remove("thumb-wrap--dragging");
+      strip.querySelectorAll(".thumb-wrap--over").forEach((x) => x.classList.remove("thumb-wrap--over"));
+      galleryDragFrom = null;
+    });
+    strip.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (galleryDragFrom == null) return;
+      const w = e.target.closest(".thumb-wrap");
+      if (!w) return;
+      strip.querySelectorAll(".thumb-wrap--over").forEach((x) => x.classList.remove("thumb-wrap--over"));
+      w.classList.add("thumb-wrap--over");
+    });
+    strip.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (galleryDragFrom == null) return;
+      const w = e.target.closest(".thumb-wrap");
+      if (w) reorderPhaseImage(detailPhase, galleryDragFrom, Number(w.dataset.idx));
+      galleryDragFrom = null;
+    });
+  }
 
   // 新增图片（当前阶段）
   const addInput = galleryRoot.querySelector("#gallery-add");
@@ -905,6 +939,16 @@ async function handleReplaceImage(phase, idx, file) {
   if (idx < 0 || idx >= list.length) return;
   list[idx].url = items[0].url;
   list[idx].label = items[0].label;
+  Storage.updateCase(detailCase.id, { images: detailCase.images });
+  renderDetail();
+}
+
+function reorderPhaseImage(phase, from, to) {
+  if (!detailCase) return;
+  const list = (detailCase.images || {})[phase] || [];
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length || from === to) return;
+  const [moved] = list.splice(from, 1);
+  list.splice(to, 0, moved);
   Storage.updateCase(detailCase.id, { images: detailCase.images });
   renderDetail();
 }
@@ -1094,30 +1138,57 @@ function openShareModal(id) {
   overlay.setAttribute("style", "position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;");
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:16px;max-width:440px;width:100%;box-shadow:0 24px 60px rgba(2,132,199,.25);overflow:hidden;">
-      <div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;"><h2 style="margin:0;font-size:18px;">导出展示页</h2></div>
-      <div style="padding:20px 22px;display:grid;gap:10px;">
-        <p style="margin:0 0 4px;color:#475569;font-size:14px;">选择要导出的版本：</p>
-        <button class="btn btn--primary" type="button" id="sh-public">
+      <div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;"><h2 style="margin:0;font-size:18px;">导出展示</h2></div>
+      <div style="padding:20px 22px;display:grid;gap:12px;">
+        <p style="margin:0 0 2px;color:#475569;font-size:14px;">选择导出格式：</p>
+        <div style="display:flex;gap:8px;" role="group" aria-label="导出格式">
+          <button class="btn btn--primary btn--sm" type="button" id="sh-fmt-web">网页（.html）</button>
+          <button class="btn btn--secondary btn--sm" type="button" id="sh-fmt-pdf">PDF（打印保存）</button>
+        </div>
+        <p style="margin:6px 0 2px;color:#475569;font-size:14px;">选择版本：</p>
+        <button class="btn btn--secondary" type="button" id="sh-public">
           对外版本（隐藏患者姓名 / 年龄 / 性别）
         </button>
         <button class="btn btn--secondary" type="button" id="sh-full">
           完整版本（含患者信息，仅自用）
         </button>
-        <p style="margin:8px 0 0;color:#94A3B8;font-size:12px;">对外版本会模糊患者隐私，仅保留病情与治疗过程，适合展示给患者或面试官。</p>
+        <p style="margin:6px 0 0;color:#94A3B8;font-size:12px;">
+          PDF 会打开一个打印窗口，在打印对话框中选择「另存为 PDF」或系统 PDF 打印机即可。
+        </p>
       </div>
       <div style="padding:14px 22px;border-top:1px solid #F1F5F9;display:flex;justify-content:flex-end;">
         <button class="btn btn--ghost btn--sm" type="button" id="sh-cancel">取消</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector("#sh-public").onclick = () => { overlay.remove(); exportCasePage(id, true); };
-  overlay.querySelector("#sh-full").onclick = () => { overlay.remove(); exportCasePage(id, false); };
+
+  let fmt = "web";
+  function markWeb() {
+    const w = overlay.querySelector("#sh-fmt-web");
+    const p = overlay.querySelector("#sh-fmt-pdf");
+    w.className = "btn btn--primary btn--sm";
+    p.className = "btn btn--secondary btn--sm";
+  }
+  function markPdf() {
+    const w = overlay.querySelector("#sh-fmt-web");
+    const p = overlay.querySelector("#sh-fmt-pdf");
+    w.className = "btn btn--secondary btn--sm";
+    p.className = "btn btn--primary btn--sm";
+  }
+  overlay.querySelector("#sh-fmt-web").onclick = () => { fmt = "web"; markWeb(); };
+  overlay.querySelector("#sh-fmt-pdf").onclick = () => { fmt = "pdf"; markPdf(); };
+
+  function run(privacy) {
+    overlay.remove();
+    if (fmt === "pdf") exportCasePdf(id, privacy);
+    else exportCasePage(id, privacy);
+  }
+  overlay.querySelector("#sh-public").onclick = () => run(true);
+  overlay.querySelector("#sh-full").onclick = () => run(false);
   overlay.querySelector("#sh-cancel").onclick = () => overlay.remove();
 }
 
-function exportCasePage(id, privacy) {
-  const c = Storage.getCase(id);
-  if (!c) return;
+function buildShareHTML(c, privacy) {
   const e2 = (q) => String(q == null ? "" : q).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const dispName = privacy ? "患者" : ((c.patientName || "未命名病例"));
   const col = (ph) => (c.images && c.images[ph] ? c.images[ph] : []);
@@ -1128,7 +1199,7 @@ function exportCasePage(id, privacy) {
   const timeline = (c.timeline || []).map((t) => `<li><strong>${e2(t.date)}</strong> · ${e2(t.step)} — ${e2(t.content)}</li>`).join("");
   const tags = (c.tags || []).map((t) => `<span class="tag">${e2(t)}</span>`).join("");
   const customF = (c.customFields || []).filter((f) => (f.k || f.v)).map((f) => `<div class="label">${e2(f.k)}</div><p>${e2(f.v)}</p>`).join("");
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${e2(dispName)} · 病例展示</title>
 <style>
   body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#1F2937;background:linear-gradient(135deg,#E0F2FE,#EDE9FE,#DCFCE7);}
@@ -1144,6 +1215,14 @@ function exportCasePage(id, privacy) {
   .ph figcaption{font-size:12px;color:#64748B;margin-top:6px;text-align:center;}
   ul.timeline{list-style:none;padding:0;margin:0;} li{padding:8px 0;border-bottom:1px dashed #E2E8F0;color:#374151;font-size:15px;}
   .footer{text-align:center;color:#94A3B8;font-size:13px;margin-top:8px;}
+  @page{margin:12mm;}
+  @media print{
+    body{background:#fff !important;}
+    .wrap{max-width:none;padding:0;margin:0;}
+    .card{box-shadow:none;border:1px solid #E2E8F0;border-radius:8px;page-break-inside:avoid;break-inside:avoid;}
+    .step, .grid{page-break-inside:avoid;break-inside:avoid;}
+    .ph img{box-shadow:none;}
+  }
 </style></head><body><div class="wrap">
 <div class="card"><h1>${e2(dispName)}</h1>
 <div class="meta"><span>初诊：${e2(c.visitDate || "--")}</span><span>状态：${e2(c.status || "进行中")}</span></div>
@@ -1158,13 +1237,40 @@ ${groups ? `<div class="card">${groups}</div>` : ""}
 ${timeline ? `<div class="card"><h3 style="color:#0284C7;margin-top:0;">治疗过程</h3><ul class="timeline">${timeline}</ul></div>` : ""}
 <div class="footer">由「齿案台」生成</div>
 </div></body></html>`;
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+}
+
+function exportCasePage(id, privacy) {
+  const c = Storage.getCase(id);
+  if (!c) return;
+  const dispName = privacy ? "患者" : ((c.patientName || "未命名病例"));
+  const blob = new Blob([buildShareHTML(c, privacy)], { type: "text/html;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = dispName + "-病例展示.html";
   document.body.appendChild(a);
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function exportCasePdf(id, privacy) {
+  const c = Storage.getCase(id);
+  if (!c) return;
+  const dispName = privacy ? "患者" : ((c.patientName || "未命名病例"));
+  const w = window.open("", "_blank");
+  if (!w) { alert("弹窗被阻止，请允许本网站打开新窗口后再试。"); return; }
+  w.document.write(buildShareHTML(c, privacy));
+  w.document.close();
+  w.document.title = dispName + "-病例展示";
+  let tries = 0;
+  const ready = () => {
+    tries += 1;
+    if (w.document.readyState === "complete" || tries > 20) {
+      setTimeout(() => { w.focus(); w.print(); }, 250);
+    } else {
+      setTimeout(ready, 150);
+    }
+  };
+  setTimeout(ready, 200);
 }
 
 /* ==========================================================

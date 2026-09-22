@@ -1732,3 +1732,20 @@ img, svg {
   .card, .stat-card, .filter-bar { animation: none; }
   .empty-state__icon, .chart-row__bar, .bar-col__bar { animation: none; }
 }
+
+/* ==========================================================
+   22. 影像拖拽排序
+   ========================================================== */
+.thumb-wrap {
+  cursor: grab;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.thumb-wrap:active { cursor: grabbing; }
+.thumb-wrap--dragging { opacity: 0.4; }
+.thumb-wrap--over { outline: 2px dashed var(--color-primary); outline-offset: 2px; border-radius: 10px; }
+@media (pointer: coarse) {
+  .gallery-hint { text-align: center; width: 100%; }
+}
