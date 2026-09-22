@@ -354,9 +354,16 @@
     await unlockWithPassword(vault, password);
   }
 
-  /** 首次创建云端库：设密码即可（加密数据存在 Cloudinary 固定文件） */
+  /** 首次创建云端库：设密码即可（加密数据存在 Cloudinary 固定文件）。
+    若本机遗留旧版绑定（JSONBin legacy vault），则本次作为「迁移」：把本机已有
+    数据一并带入新库并覆盖旧绑定。 */
   async function signup(password) {
-    if (getLocalVault()) throw new Error("本设备已绑定云端数据，请直接登录");
+    if (getLocalVault() && !isLegacyVault()) {
+      throw new Error("本设备已绑定云端数据，请直接登录");
+    }
+    loadLocalSnapshot();                        // 读入本机已有病例（连同 legacy 期的数据）
+    window.Storage._cases = memory.cases;
+    window.Storage._profile = memory.profile;
     const snap = buildSnapshot();
     const envelope = await encryptObject(snap, password);
     const vault = await binCreate(null, envelope);
