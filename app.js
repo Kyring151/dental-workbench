@@ -100,6 +100,58 @@ function countImages(c) {
   return n;
 }
 
+/* 统计看板：治疗类型分布 + 近 6 个月新增 */
+function renderDashboardCharts() {
+  const typeBox = document.getElementById("chart-types");
+  const monthBox = document.getElementById("chart-months");
+  if (!typeBox && !monthBox) return;
+
+  const cases = Storage.getCases();
+
+  if (typeBox) {
+    const counts = {};
+    (cases.length ? cases : []).forEach((c) => {
+      const t = c.treatmentType || "未分类";
+      counts[t] = (counts[t] || 0) + 1;
+    });
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const max = Math.max(1, ...entries.map((e) => e[1]));
+    if (!entries.length) {
+      typeBox.innerHTML = `<p class="chart-empty">暂无数据</p>`;
+    } else {
+      typeBox.innerHTML = entries.map(([t, n]) => `
+        <div class="chart-row">
+          <span class="chart-row__label">${esc(t)}</span>
+          <div class="chart-row__track"><div class="chart-row__bar" style="width:${Math.round((n / max) * 100)}%"></div></div>
+          <span class="chart-row__num">${n}</span>
+        </div>`).join("");
+    }
+  }
+
+  if (monthBox) {
+    const now = new Date();
+    const labels = [];
+    const points = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+      const label = (d.getMonth() + 1) + "月";
+      labels.push(label);
+      points.push(cases.filter((c) => (c.visitDate || "").slice(0, 7) === key).length);
+    }
+    const maxM = Math.max(1, ...points);
+    monthBox.innerHTML = `
+      <div class="bar-chart">
+        ${labels.map((lb, i) => `
+          <div class="bar-col">
+            <div class="bar-col__value">${points[i] || ""}</div>
+            <div class="bar-col__track"><div class="bar-col__bar" style="height:${Math.max(4, Math.round((points[i] / maxM) * 100))}%"></div></div>
+            <div class="bar-col__label">${lb}</div>
+          </div>`).join("")}
+      </div>`;
+  }
+}
+
 function renderRecentCases() {
   const container = document.getElementById("recent-cases");
   if (!container) return;
@@ -160,6 +212,7 @@ function buildCaseCard(c) {
    ========================================================== */
 let casesViewMode = "grid";
 let casesFilter = "全部";
+let casesTag = "全部";
 let casesSearch = "";
 
 function initCasesPage() {
@@ -168,23 +221,41 @@ function initCasesPage() {
   const searchInput = document.getElementById("cases-search");
   const filterChips = document.querySelectorAll("[data-filter]");
   const viewButtons = document.querySelectorAll("[data-view]");
+  const tagWrap = document.getElementById("cases-tagfilter");
 
   if (!gridView || !listView) return;
+
+  function renderTagFilter() {
+    if (!tagWrap) return;
+    const tags = Storage.getAllTags();
+    const chips = ["<button class='filter-chip " + (casesTag === "全部" ? "filter-chip--active" : "") + "' data-tagfilter='全部'>全部标签</button>"]
+      .concat(tags.map((t) => "<button class='filter-chip " + (casesTag === t ? "filter-chip--active" : "") + "' data-tagfilter='" + esc(t) + "'>" + esc(t) + "</button>"))
+      .join("");
+    tagWrap.innerHTML = chips;
+    tagWrap.querySelectorAll("[data-tagfilter]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        casesTag = chip.dataset.tagfilter;
+        renderTagFilter();
+        renderCases();
+      });
+    });
+  }
 
   function renderCases() {
     const all = Storage.getCases();
     const filtered = all.filter((c) => {
       const matchesFilter =
         casesFilter === "全部" || c.status === casesFilter || c.treatmentType === casesFilter;
-      const q = casesSearch;
-      const matchesSearch =
-        q === "" ||
-        (c.patientName || "").includes(q) ||
-        (c.diagnosis || "").includes(q) ||
-        (c.chiefComplaint || "").includes(q) ||
-        (c.tags || []).some((t) => t.includes(q)) ||
-        (c.treatmentType || "").includes(q);
-      return matchesFilter && matchesSearch;
+      const matchesTag =
+        casesTag === "全部" || (c.tags || []).includes(casesTag);
+      const q = casesSearch.toLowerCase();
+      const haystack = [
+        c.patientName, c.diagnosis, c.chiefComplaint, c.patientRequest,
+        c.history, c.pastHistory, c.reason, c.plan, c.exam, c.treatmentType,
+        (c.tags || []).join(" ")
+      ].join(" ").toLowerCase();
+      const matchesSearch = q === "" || haystack.includes(q);
+      return matchesFilter && matchesTag && matchesSearch;
     });
 
     const countEl = document.getElementById("cases-count");
@@ -240,6 +311,7 @@ function initCasesPage() {
     renderCases();
   });
 
+  renderTagFilter();
   renderCases();
 }
 
@@ -280,6 +352,66 @@ function buildCaseTable(list) {
       </table>
     </div>
   `;
+}
+
+/* ---- 数据导入 / 导出（.json 备份，跨设备搬运） ---- */
+function initDataTransfer() {
+  const exportBtn = document.getElementById("btn-export-data");
+  const importInput = document.getElementById("btn-import-data");
+
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+      const payload = {
+        app: "齿案台",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        profile: Storage.getProfile(),
+        cases: Storage.getCases()
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      const d = new Date();
+      a.download = "齿案台备份-" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + ".json";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+  }
+
+  if (importInput) {
+    importInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          const incoming = Array.isArray(data.cases) ? data.cases : Array.isArray(data) ? data : null;
+          if (!incoming) { alert("文件格式不正确，请选择齿案台导出的 .json 备份。"); return; }
+          const doMerge = confirm(
+            "检测到 " + incoming.length + " 个病例。\n\n确定 = 合并（保留现有，跳过编号相同的）\n取消 = 整体替换为备份内容"
+          );
+          if (doMerge) {
+            const existingIds = new Set(Storage.getCases().map((c) => c.id));
+            const merged = Storage.getCases().concat(incoming.filter((c) => c && !existingIds.has(c.id)));
+            Storage.setCases(merged);
+          } else {
+            Storage.setCases(incoming);
+          }
+          if (data.profile && typeof data.profile === "object") {
+            Storage.setProfile({ ...Storage.getProfile(), ...data.profile });
+          }
+          alert("导入完成。");
+          location.reload();
+        } catch (err) {
+          alert("导入失败：文件无法解析。");
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
 }
 
 /* ==========================================================
@@ -370,10 +502,10 @@ function renderDetail() {
         </div>
       </div>
       <div class="page__actions">
-        <button class="btn btn--secondary" type="button">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          导出 PDF
-        </button>
+        <button class="btn btn--primary" type="button" id="edit-case-btn">编辑信息</button>
+        <button class="btn btn--secondary" type="button" id="copy-case-btn">复制病例</button>
+        <button class="btn btn--secondary" type="button" id="share-case-btn">导出展示页</button>
+        <button class="btn" type="button" id="delete-case-btn" style="color:#DC2626;border-color:#FECACA;">删除病例</button>
       </div>
     </div>
 
@@ -418,6 +550,8 @@ function renderDetail() {
               <div class="section__body">${html}</div>
             </div>
           `).join("")}
+
+          ${buildCustomFieldsHtml(c)}
 
           <div class="section section--timeline">
             <div class="section__header-row">
@@ -471,6 +605,25 @@ function renderDetail() {
     });
   });
 
+  // 编辑初始信息
+  const editBtn = root.querySelector("#edit-case-btn");
+  if (editBtn) editBtn.addEventListener("click", () => openEditCaseModal(c.id));
+
+  // 导出展示页（含隐私选项）
+  const shareBtn = root.querySelector("#share-case-btn");
+  if (shareBtn) shareBtn.addEventListener("click", () => openShareModal(c.id));
+
+  // 复制病例
+  const copyBtn = root.querySelector("#copy-case-btn");
+  if (copyBtn) copyBtn.addEventListener("click", () => {
+    const copy = Storage.duplicateCase(c.id);
+    if (copy) location.href = "case-detail.html?id=" + copy.id;
+  });
+
+  // 删除病例
+  const delBtn = root.querySelector("#delete-case-btn");
+  if (delBtn) delBtn.addEventListener("click", () => doDeleteCase(c.id));
+
   // 绑定「添加治疗记录」
   const addVisitBtn = root.querySelector("#add-visit-btn");
   const visitForm = root.querySelector("#visit-form");
@@ -517,6 +670,21 @@ function buildTimeline(c) {
   </li>`;
 }
 
+function buildCustomFieldsHtml(c) {
+  const fields = (c.customFields || []).filter((f) => (f.k || f.v));
+  if (!fields.length) return "";
+  return `
+    <div class="section">
+      <h2 class="section__title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><rect x="4" y="7" width="6" height="13" rx="1"/><rect x="14" y="7" width="6" height="13" rx="1"/></svg>
+        补充信息
+      </h2>
+      <div class="section__body">
+        ${fields.map((f) => `<p class="paragraph"><strong>${esc(f.k)}：</strong>${esc(f.v)}</p>`).join("")}
+      </div>
+    </div>`;
+}
+
 function buildGallery() {
   const images = (detailCase.images || {})[detailPhase] || [];
   const caption = images[0]?.caption || "";
@@ -553,9 +721,11 @@ function buildGallery() {
 
     <div class="thumbnail-strip" id="thumbnail-gallery">${buildThumbs(images)}</div>
 
-    <div class="gallery-note">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-      <span>点击缩略图切换主图；后续版本将支持拖拽对比与图片标注。</span>
+    <div class="gallery-actions">
+      <label class="btn btn--ghost btn--sm" for="gallery-add">＋ 新增图片</label>
+      <input type="file" id="gallery-add" accept="image/*" multiple style="display:none" />
+      <button class="btn btn--ghost btn--sm" type="button" id="gallery-compare">术前 ⊖ 术后 对比</button>
+      <span class="gallery-hint">缩略图右上 ×删除、左下 ⇄替换图片</span>
     </div>
   `;
 
@@ -570,12 +740,16 @@ function buildGallery() {
           </div>
         </div>
         <div class="tabs" role="tablist" aria-label="影像阶段">${tabsHtml}</div>
-        <div class="empty-state" style="padding:40px 20px;">
+        <div class="empty-state" style="padding:30px 20px;">
           <div class="empty-state__icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </div>
           <h3 class="empty-state__title">该阶段暂无影像</h3>
-          <p class="empty-state__text">可通过「新建病例」或后续编辑补充图片。</p>
+          <p class="empty-state__text">可在下方为该阶段补充图片。</p>
+        </div>
+        <div class="gallery-actions">
+          <label class="btn btn--ghost btn--sm" for="gallery-add">＋ 新增图片</label>
+          <input type="file" id="gallery-add" accept="image/*" multiple style="display:none" />
         </div>
       </div>
     `;
@@ -603,10 +777,14 @@ function buildThumbs(images) {
   return images
     .map(
       (img, i) => `
-      <button class="thumbnail ${i === 0 ? "thumbnail--active" : ""}" data-index="${i}" aria-label="查看 ${esc(img.label || "")}">
-        ${img.url ? `<img class="thumb-image" src="${img.url}" alt=""/>` : `<div class="thumbnail__placeholder" style="background:${TYPE_BG[img.type] || TYPE_BG.xray}"></div>`}
-        <span class="thumbnail__label">${esc(img.label || "")}</span>
-      </button>`
+      <div class="thumb-wrap" data-idx="${i}">
+        <button class="thumbnail ${i === 0 ? "thumbnail--active" : ""}" data-index="${i}" aria-label="查看 ${esc(img.label || "")}">
+          ${img.url ? `<img class="thumb-image" src="${img.url}" alt=""/>` : `<div class="thumbnail__placeholder" style="background:${TYPE_BG[img.type] || TYPE_BG.xray}"></div>`}
+          <span class="thumbnail__label">${esc(img.label || "")}</span>
+        </button>
+        <button class="thumb-ctl thumb-ctl--replace" data-act="replace" data-index="${i}" title="替换" aria-label="替换这张图片">⇄</button>
+        <button class="thumb-ctl thumb-ctl--delete" data-act="del" data-index="${i}" title="删除" aria-label="删除这张图片">×</button>
+      </div>`
     )
     .join("");
 }
@@ -633,14 +811,433 @@ function initGallery() {
       main.innerHTML = buildMainImage(img);
       thumbs.forEach((x) => x.classList.remove("thumbnail--active"));
       th.classList.add("thumbnail--active");
+      openLightbox(img, detailPhase, idx);
     });
   });
+
+  // 删除 / 替换单张图片
+  galleryRoot.querySelectorAll(".thumb-ctl").forEach((ctl) => {
+    ctl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = Number(ctl.dataset.index);
+      if (ctl.dataset.act === "del") {
+        removeImageAt(detailPhase, idx);
+      } else if (ctl.dataset.act === "replace") {
+        replaceImagePrompt(detailPhase, idx);
+      }
+    });
+  });
+
+  // 新增图片（当前阶段）
+  const addInput = galleryRoot.querySelector("#gallery-add");
+  if (addInput) addInput.addEventListener("change", (e) => {
+    addImagesToPhase(detailPhase, Array.from(e.target.files));
+    e.target.value = "";
+  });
+
+  // 术前术后对比
+  const cmpBtn = galleryRoot.querySelector("#gallery-compare");
+  if (cmpBtn) cmpBtn.addEventListener("click", () => openCompare());
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = (e) => resolve(e.target.result);
+    r.readAsDataURL(file);
+  });
+}
+
+async function uploadRawFiles(files) {
+  const out = [];
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) continue;
+    const dataUrl = await readFileAsDataURL(file);
+    let url = dataUrl;
+    if (window.CloudData && window.CloudData.hasImageCloud()) {
+      try { url = await window.CloudData.uploadImage(dataUrl); }
+      catch (e) { alert((e && e.message) || "图片上传失败"); return null; }
+    }
+    out.push({
+      id: "g" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+      type: "uploaded",
+      label: file.name,
+      url
+    });
+  }
+  return out;
+}
+
+async function addImagesToPhase(phase, files) {
+  if (!detailCase) return;
+  const items = await uploadRawFiles(files);
+  if (!items || items.length === 0) return;
+  detailCase.images = detailCase.images || { pre: [], during: [], post: [] };
+  detailCase.images[phase] = detailCase.images[phase] || [];
+  detailCase.images[phase].push(...items);
+  Storage.updateCase(detailCase.id, { images: detailCase.images });
+  renderDetail();
+}
+
+function removeImageAt(phase, idx) {
+  if (!detailCase) return;
+  if (!confirm("确定删除这张图片吗？")) return;
+  const list = (detailCase.images || {})[phase] || [];
+  if (idx < 0 || idx >= list.length) return;
+  list.splice(idx, 1);
+  Storage.updateCase(detailCase.id, { images: detailCase.images });
+  renderDetail();
+}
+
+function replaceImagePrompt(phase, idx) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = () => handleReplaceImage(phase, idx, Array.from(input.files)[0]);
+  input.click();
+}
+
+async function handleReplaceImage(phase, idx, file) {
+  if (!detailCase || !file) return;
+  const items = await uploadRawFiles([file]);
+  if (!items || !items.length) return;
+  const list = (detailCase.images || {})[phase] || [];
+  if (idx < 0 || idx >= list.length) return;
+  list[idx].url = items[0].url;
+  list[idx].label = items[0].label;
+  Storage.updateCase(detailCase.id, { images: detailCase.images });
+  renderDetail();
+}
+
+/* ---- 术前术后对比滑杆 ---- */
+function openCompare() {
+  const pre = ((detailCase.images || {}).pre || []);
+  const post = ((detailCase.images || {}).post || []);
+  if (!pre.length || !post.length) {
+    alert("需要「术前」和「术后」都至少有一张图片才能对比。");
+    return;
+  }
+  const shell = document.createElement("div");
+  shell.setAttribute("style", "position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;");
+  shell.innerHTML = `
+    <div style="color:#fff;font-weight:600;font-size:15px;">术前 ⊖ 术后：拖动滑杆对比</div>
+    <div id="cmp-stage" style="position:relative;max-width:min(92vw,760px);width:100%;aspect-ratio:4/3;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);background:#000;">
+      <div id="cmp-under" style="position:absolute;inset:0;background-repeat:no-repeat;background-size:cover;background-position:center;"></div>
+      <div id="cmp-over" style="position:absolute;top:0;bottom:0;left:0;width:50%;overflow:hidden;background-repeat:no-repeat;background-size:cover;background-position:center;border-right:2px solid #fff;"></div>
+      <div id="cmp-handle" style="position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);width:34px;background:rgba(255,255,255,.14);cursor:ew-resize;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;">⇄</div>
+    </div>
+    <button type="button" id="cmp-close" style="padding:8px 22px;border:none;border-radius:10px;background:#0EA5E9;color:#fff;font-weight:600;cursor:pointer;">关闭</button>`;
+  document.body.appendChild(shell);
+  shell.querySelector("#cmp-under").style.backgroundImage = "url(" + post[0].url + ")";
+  shell.querySelector("#cmp-over").style.backgroundImage = "url(" + pre[0].url + ")";
+  const stage = shell.querySelector("#cmp-stage");
+  const overDiv = shell.querySelector("#cmp-over");
+  const handle = shell.querySelector("#cmp-handle");
+  let dragging = false;
+  const setPos = (clientX) => {
+    const r = stage.getBoundingClientRect();
+    let p = ((clientX - r.left) / r.width) * 100;
+    p = Math.max(0, Math.min(100, p));
+    overDiv.style.width = p + "%";
+    handle.style.left = p + "%";
+  };
+  handle.addEventListener("mousedown", () => { dragging = true; });
+  window.addEventListener("mousemove", (e) => { if (dragging) setPos(e.clientX); });
+  window.addEventListener("mouseup", () => { dragging = false; });
+  overDiv.addEventListener("click", (e) => setPos(e.clientX));
+  shell.querySelector("#cmp-close").addEventListener("click", () => shell.remove());
+}
+
+/* ---- 图片标注 ---- */
+function openLightbox(img, phase, idx) {
+  if (!img || !img.url) return;
+  const box = document.createElement("div");
+  box.setAttribute("style", "position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;padding:20px;");
+  box.innerHTML = `
+    <div style="position:relative;max-width:min(94vw,860px);width:100%;max-height:90vh;display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;color:#fff;">
+        <span style="font-weight:600;">${esc(img.caption || img.label || "影像")}</span>
+        <button type="button" id="lb-close" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;">×</button>
+      </div>
+      <div id="lb-stage" style="position:relative;background:#000;border-radius:12px;overflow:hidden;flex:1;min-height:58vh;">
+        <img id="lb-img" src="${img.url}" style="width:100%;height:100%;object-fit:contain;display:block;"/>
+        <div id="lb-marks" style="position:absolute;inset:0;pointer-events:none;"></div>
+      </div>
+      <div id="lb-annots" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"></div>
+    </div>`;
+  document.body.appendChild(box);
+  const stage = box.querySelector("#lb-stage");
+  const marks = box.querySelector("#lb-marks");
+  const annots = box.querySelector("#lb-annots");
+  img.annotations = img.annotations || [];
+  function draw() {
+    marks.innerHTML = "";
+    annots.innerHTML = "";
+    img.annotations.forEach((m) => {
+      const p = document.createElement("div");
+      p.style.cssText = "position:absolute;left:" + m.x + "%;top:" + m.y + "%;transform:translate(-50%,-130%);background:#EF4444;color:#fff;font-size:12px;padding:2px 8px;border-radius:12px;white-space:nowrap;";
+      p.textContent = m.text || "标注";
+      const dot = document.createElement("div");
+      dot.style.cssText = "position:absolute;left:" + m.x + "%;top:" + m.y + "%;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;background:#EF4444;border:2px solid #fff;";
+      marks.appendChild(dot);
+      marks.appendChild(p);
+    });
+    const addBtn = document.createElement("button");
+    addBtn.className = "btn btn--primary btn--sm";
+    addBtn.type = "button";
+    addBtn.textContent = "＋ 添加标注";
+    addBtn.onclick = () => {
+      const onStage = (e) => {
+        stage.removeEventListener("click", onStage);
+        const r = stage.getBoundingClientRect();
+        const x = ((e.clientX - r.left) / r.width) * 100;
+        const y = ((e.clientY - r.top) / r.height) * 100;
+        const text = (window.prompt("标注文字：") || "").trim();
+        if (text) img.annotations.push({ x: +x.toFixed(2), y: +y.toFixed(2), text });
+        persistDetailImages();
+        draw();
+      };
+      stage.addEventListener("click", onStage);
+      window.alert("请在图片上点击要标注的位置");
+    };
+    annots.appendChild(addBtn);
+    img.annotations.forEach((m, i) => {
+      const chip = document.createElement("span");
+      chip.style.cssText = "display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);color:#fff;font-size:12px;padding:3px 10px;border-radius:20px;";
+      chip.textContent = (i + 1) + ". " + m.text;
+      const del = document.createElement("button");
+      del.style.cssText = "background:none;border:none;color:#FCA5A5;cursor:pointer;font-size:14px;";
+      del.textContent = "×";
+      del.onclick = () => { img.annotations.splice(i, 1); persistDetailImages(); draw(); };
+      chip.appendChild(del);
+      annots.appendChild(chip);
+    });
+  }
+  function persistDetailImages() { Storage.updateCase(detailCase.id, { images: detailCase.images }); }
+  draw();
+  box.querySelector("#lb-close").onclick = () => box.remove();
+}
+
+/* ---- 编辑病例初始信息 ---- */
+function openEditCaseModal(id) {
+  const c = Storage.getCase(id);
+  if (!c) return;
+  const TYPES = ["龋病充填", "根管治疗", "种植", "牙周", "拔牙", "美学修复", "美白", "修复", "儿童口腔"];
+  const opts = TYPES.map((t) => "<option " + (c.treatmentType === t ? "selected" : "") + ">" + t + "</option>").join("");
+  const overlay = document.createElement("div");
+  overlay.setAttribute("style", "position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;");
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 60px rgba(2,132,199,.25);">
+      <div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;"><h2 style="margin:0;font-size:18px;">编辑病例信息</h2></div>
+      <div style="padding:20px 22px;display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:14px;">
+        <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">患者姓名</span><input class="input" id="e-name" value="${esc(c.patientName || "")}"/></label>
+        <label><span style="display:block;color:#475569;margin-bottom:4px;">年龄</span><input class="input" id="e-age" type="number" value="${esc(c.age || "")}"/></label>
+        <label><span style="display:block;color:#475569;margin-bottom:4px;">性别</span><select class="input" id="e-gender"><option value="">--</option><option ${c.gender === "男" ? "selected" : ""}>男</option><option ${c.gender === "女" ? "selected" : ""}>女</option></select></label>
+        <label><span style="display:block;color:#475569;margin-bottom:4px;">初诊日期</span><input class="input" id="e-visit" type="date" value="${esc(c.visitDate || "")}"/></label>
+        <label><span style="display:block;color:#475569;margin-bottom:4px;">治疗类型</span><select class="input" id="e-type">${opts}</select></label>
+        <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">诊断</span><input class="input" id="e-diagnosis" value="${esc(c.diagnosis || "")}"/></label>
+        <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">主诉</span><textarea class="textarea" id="e-chief" rows="2">${esc(c.chiefComplaint || "")}</textarea></label>
+        <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">患者诉求</span><textarea class="textarea" id="e-request" rows="2">${esc(c.patientRequest || "")}</textarea></label>
+        <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">现病史</span><textarea class="textarea" id="e-history" rows="2">${esc(c.history || "")}</textarea></label>
+        <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">既往史</span><textarea class="textarea" id="e-past" rows="2">${esc(c.pastHistory || "")}</textarea></label>
+        <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">治疗计划</span><textarea class="textarea" id="e-plan" rows="2">${esc(c.plan || "")}</textarea></label>
+        <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">标签（逗号分隔）</span><input class="input" id="e-tags" value="${esc((c.tags || []).join(","))}"/></label>
+        <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">补充字段（每行一项，格式：字段名: 值，如「复诊提醒: 3月后」）</span><textarea class="textarea" id="e-custom" rows="3">${esc((c.customFields || []).map((f) => f.k + ": " + f.v).join("\n"))}</textarea></label>
+      </div>
+      <div style="padding:16px 22px;border-top:1px solid #E2E8F0;display:flex;justify-content:flex-end;gap:10px;">
+        <button class="btn btn--ghost" type="button" id="e-cancel">取消</button>
+        <button class="btn btn--primary" type="button" id="e-save">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const val = (s) => (overlay.querySelector(s) || {}).value || "";
+  overlay.querySelector("#e-cancel").onclick = () => overlay.remove();
+  overlay.querySelector("#e-save").onclick = () => {
+    Storage.updateCase(c.id, {
+      patientName: val("#e-name").trim(),
+      age: val("#e-age") || null,
+      gender: val("#e-gender"),
+      visitDate: val("#e-visit"),
+      treatmentType: val("#e-type"),
+      diagnosis: val("#e-diagnosis").trim(),
+      chiefComplaint: val("#e-chief").trim(),
+      patientRequest: val("#e-request").trim(),
+      history: val("#e-history").trim(),
+      pastHistory: val("#e-past").trim(),
+      plan: val("#e-plan").trim(),
+      tags: val("#e-tags").split(/[,，]/).map((s) => s.trim()).filter(Boolean),
+      customFields: val("#e-custom").split("\n").map((line) => {
+        const i = line.indexOf(":");
+        if (i < 0) return null;
+        const k = line.slice(0, i).trim();
+        const v = line.slice(i + 1).trim();
+        return k && v ? { k, v } : null;
+      }).filter(Boolean)
+    });
+    overlay.remove();
+    renderDetail();
+  };
+}
+
+/* ---- 删除病例 ---- */
+function doDeleteCase(id) {
+  if (!confirm("确定删除该病例吗？此操作不可恢复。")) return;
+  Storage.deleteCase(id);
+  location.href = "cases.html";
+}
+
+/* ---- 导出单个病例为一个可直接分享的展示页 ---- */
+function openShareModal(id) {
+  const c = Storage.getCase(id);
+  if (!c) return;
+  const overlay = document.createElement("div");
+  overlay.setAttribute("style", "position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;");
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;max-width:440px;width:100%;box-shadow:0 24px 60px rgba(2,132,199,.25);overflow:hidden;">
+      <div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;"><h2 style="margin:0;font-size:18px;">导出展示页</h2></div>
+      <div style="padding:20px 22px;display:grid;gap:10px;">
+        <p style="margin:0 0 4px;color:#475569;font-size:14px;">选择要导出的版本：</p>
+        <button class="btn btn--primary" type="button" id="sh-public">
+          对外版本（隐藏患者姓名 / 年龄 / 性别）
+        </button>
+        <button class="btn btn--secondary" type="button" id="sh-full">
+          完整版本（含患者信息，仅自用）
+        </button>
+        <p style="margin:8px 0 0;color:#94A3B8;font-size:12px;">对外版本会模糊患者隐私，仅保留病情与治疗过程，适合展示给患者或面试官。</p>
+      </div>
+      <div style="padding:14px 22px;border-top:1px solid #F1F5F9;display:flex;justify-content:flex-end;">
+        <button class="btn btn--ghost btn--sm" type="button" id="sh-cancel">取消</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#sh-public").onclick = () => { overlay.remove(); exportCasePage(id, true); };
+  overlay.querySelector("#sh-full").onclick = () => { overlay.remove(); exportCasePage(id, false); };
+  overlay.querySelector("#sh-cancel").onclick = () => overlay.remove();
+}
+
+function exportCasePage(id, privacy) {
+  const c = Storage.getCase(id);
+  if (!c) return;
+  const e2 = (q) => String(q == null ? "" : q).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const dispName = privacy ? "患者" : ((c.patientName || "未命名病例"));
+  const col = (ph) => (c.images && c.images[ph] ? c.images[ph] : []);
+  const imgRow = (arr) => arr.map((img) => `<figure class="ph"><img src="${img.url}" alt=""/>${img.caption || img.label ? "<figcaption>" + e2(img.caption || img.label) + "</figcaption>" : ""}</figure>`).join("");
+  const groups = [
+    ["术前", col("pre")], ["术中", col("during")], ["术后", col("post")]
+  ].map(([t, arr]) => arr.length ? `<div class="step"><h3>${t}</h3><div class="grid">${imgRow(arr)}</div></div>` : "").join("");
+  const timeline = (c.timeline || []).map((t) => `<li><strong>${e2(t.date)}</strong> · ${e2(t.step)} — ${e2(t.content)}</li>`).join("");
+  const tags = (c.tags || []).map((t) => `<span class="tag">${e2(t)}</span>`).join("");
+  const customF = (c.customFields || []).filter((f) => (f.k || f.v)).map((f) => `<div class="label">${e2(f.k)}</div><p>${e2(f.v)}</p>`).join("");
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${e2(dispName)} · 病例展示</title>
+<style>
+  body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#1F2937;background:linear-gradient(135deg,#E0F2FE,#EDE9FE,#DCFCE7);}
+  .wrap{max-width:880px;margin:0 auto;padding:40px 24px;}
+  .card{background:#fff;border-radius:18px;box-shadow:0 14px 40px rgba(2,132,199,.10);padding:30px;margin-bottom:24px;}
+  h1{margin:0 0 6px;font-size:26px;} .id{color:#64748B;font-size:13px;margin-bottom:12px;}
+  .meta{display:flex;gap:20px;flex-wrap:wrap;color:#475569;font-size:14px;margin-bottom:14px;}
+  .tag{display:inline-block;background:#E0F2FE;color:#0369A1;border-radius:20px;padding:3px 12px;font-size:13px;margin-right:6px;}
+  .label{color:#64748B;font-size:13px;font-weight:600;margin:14px 0 6px;}
+  p{margin:4px 0;color:#374151;font-size:15px;line-height:1.7;}
+  .step h3{color:#0284C7;margin:0 0 12px;} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+  .ph{margin:0;} .ph img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.12);}
+  .ph figcaption{font-size:12px;color:#64748B;margin-top:6px;text-align:center;}
+  ul.timeline{list-style:none;padding:0;margin:0;} li{padding:8px 0;border-bottom:1px dashed #E2E8F0;color:#374151;font-size:15px;}
+  .footer{text-align:center;color:#94A3B8;font-size:13px;margin-top:8px;}
+</style></head><body><div class="wrap">
+<div class="card"><h1>${e2(dispName)}</h1>
+<div class="meta"><span>初诊：${e2(c.visitDate || "--")}</span><span>状态：${e2(c.status || "进行中")}</span></div>
+${tags}</div>
+<div class="card"><div class="label">主诉</div><p>${e2(c.chiefComplaint || "--")}</p>
+<div class="label">患者诉求</div><p>${e2(c.patientRequest || "--")}</p>
+<div class="label">现病史</div><p>${e2(c.history || "--")}</p>
+<div class="label">诊断</div><p>${e2(c.diagnosis || "--")}</p>
+<div class="label">治疗计划</div><p>${e2(c.plan || "--")}</p>
+${customF}</div>
+${groups ? `<div class="card">${groups}</div>` : ""}
+${timeline ? `<div class="card"><h3 style="color:#0284C7;margin-top:0;">治疗过程</h3><ul class="timeline">${timeline}</ul></div>` : ""}
+<div class="footer">由「齿案台」生成</div>
+</div></body></html>`;
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = dispName + "-病例展示.html";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 /* ==========================================================
    6. New Case Wizard + 多图上传
    ========================================================== */
 let uploadedImages = { pre: [], during: [], post: [] };
+
+const CASE_TEMPLATES = {
+  "龋病充填": {
+    "f-chief": "右下后牙龋坏，冷热刺激时有酸痛",
+    "f-request": "补牙恢复咀嚼功能，尽量保留天然牙",
+    "f-diagnosis": "下颌第二磨牙深龋",
+    "f-type": "龋病充填",
+    "f-history": "进食甜食或冷热刺激时酸痛约 2 周，平日无自发痛",
+    "f-past": "",
+    "f-plan": "去除腐质 → 窝洞预备 → 树脂分层充填 → 咬合调整"
+  },
+  "根管治疗": {
+    "f-chief": "左下后牙夜间自发性疼痛 3 天",
+    "f-request": "缓解疼痛，保留患牙，恢复功能",
+    "f-diagnosis": "下第一磨牙急性牙髓炎",
+    "f-type": "根管治疗",
+    "f-history": "近 1 周冷热刺激痛，昨日夜间痛明显加剧",
+    "f-past": "",
+    "f-plan": "开髓引流 → 根管预备与消毒 → 根管充填 → 冠修复"
+  },
+  "种植修复": {
+    "f-chief": "右下后牙缺失 3 个月，要求种植修复",
+    "f-request": "恢复咀嚼功能与美观",
+    "f-diagnosis": "下颌第二前磨牙缺失",
+    "f-type": "种植修复",
+    "f-history": "缺牙区牙槽嵴愈合良好，邻牙无明显倾斜、对颌未伸长",
+    "f-past": "",
+    "f-plan": "CBCT 评估 → 一期植入 → 骨结合期 → 二期取模 → 戴冠"
+  },
+  "牙周治疗": {
+    "f-chief": "刷牙出血、牙龈红肿约 1 个月",
+    "f-request": "改善牙龈出血，防止牙齿松动",
+    "f-diagnosis": "慢性牙周炎",
+    "f-type": "牙周治疗",
+    "f-history": "刷牙或啃咬硬物时易出血，偶有口腔异味",
+    "f-past": "",
+    "f-plan": "口腔卫生宣教 → 龈上洁治 → 龈下刮治 → 定期复查维护"
+  }
+};
+
+function initTemplatePicker() {
+  const buttons = document.querySelectorAll("[data-template]");
+  if (!buttons.length) return;
+
+  function applyTemplate(name) {
+    const tpl = CASE_TEMPLATES[name];
+    const ids = ["f-chief", "f-request", "f-diagnosis", "f-type", "f-history", "f-past", "f-plan"];
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (tpl) {
+        el.value = tpl[id] || "";
+      } else {
+        el.value = "";
+      }
+    });
+    saveDraft();
+  }
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      applyTemplate(btn.dataset.template);
+      btn.classList.add("btn--primary");
+      buttons.forEach((b) => { if (b !== btn) b.classList.remove("btn--primary"); });
+    });
+  });
+}
 
 function initUploadZone(phase) {
   const input = document.getElementById(`upload-${phase}`);
@@ -757,6 +1354,7 @@ function initNewCaseWizard() {
 
   if (!steps.length) return;
 
+  initTemplatePicker();
   ["pre", "during", "post"].forEach((p) => initUploadZone(p));
 
   // 恢复未完成的草稿（文字 + 已选图片）
@@ -917,8 +1515,10 @@ async function init() {
 
   initProfile();
   renderDashboardStats();
+  renderDashboardCharts();
   renderRecentCases();
   initCasesPage();
+  initDataTransfer();
   initCaseDetail();
   initNewCaseWizard();
 }

@@ -58,6 +58,18 @@
     </div>
 
     <div class="card">
+      <!-- 常用模板 -->
+      <div class="template-bar">
+        <span class="template-bar__label">常用模板：</span>
+        <button class="btn btn--ghost btn--sm" type="button" data-template="">
+          不使用
+        </button>
+        <button class="btn btn--ghost btn--sm" type="button" data-template="龋病充填">龋病充填</button>
+        <button class="btn btn--ghost btn--sm" type="button" data-template="根管治疗">根管治疗</button>
+        <button class="btn btn--ghost btn--sm" type="button" data-template="种植修复">种植修复</button>
+        <button class="btn btn--ghost btn--sm" type="button" data-template="牙周治疗">牙周治疗</button>
+      </div>
+
       <!-- 步骤指示器 -->
       <div class="steps" aria-label="录入进度">
         <div class="step step--active">
@@ -200,6 +212,24 @@
   </main>
 
   <style>
+    .template-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--color-divider);
+    }
+    .template-bar__label {
+      font-size: 13px;
+      color: var(--color-text-sub);
+      font-weight: 600;
+      margin-right: 2px;
+    }
+    .template-bar .btn--ghost[data-template=""] {
+      color: var(--color-text-muted);
+    }
     .dropzone {
       border: 2px dashed var(--color-border);
       border-radius: var(--radius-lg);

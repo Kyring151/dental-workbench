@@ -72,6 +72,51 @@ const Storage = {
     return this._cases.find((x) => x.id === id);
   },
 
+  /** 更新病例任意字段（编辑初始信息） */
+  updateCase(id, patch) {
+    const c = this._cases.find((x) => x.id === id);
+    if (c) {
+      Object.keys(patch).forEach((k) => { c[k] = patch[k]; });
+      c.updatedAt = new Date().toISOString();
+      this._persist();
+    }
+    return this._cases.find((x) => x.id === id);
+  },
+
+  /** 删除病例 */
+  deleteCase(id) {
+    const i = this._cases.findIndex((x) => x.id === id);
+    let removed = null;
+    if (i >= 0) { removed = this._cases[i]; this._cases.splice(i, 1); this._persist(); }
+    return removed;
+  },
+
+  /** 一键复制病例（保留诊疗/影像，重置为「进行中」并标记副本） */
+  duplicateCase(id) {
+    const src = this._cases.find((x) => x.id === id);
+    if (!src) return null;
+    const copy = {
+      ...JSON.parse(JSON.stringify(src)),
+      id: genCaseId(),
+      status: "进行中",
+      completionDate: null,
+      visitDate: new Date().toISOString().slice(0, 10),
+      updatedAt: new Date().toISOString(),
+      patientName: (src.patientName || "未命名") + "（副本）",
+      timeline: (src.timeline || []).map((t) => ({ ...t }))
+    };
+    this._cases.unshift(copy);
+    this._persist();
+    return copy;
+  },
+
+  /** 汇总所有已使用标签（去重） */
+  getAllTags() {
+    const set = new Set();
+    this._cases.forEach((c) => (c.tags || []).forEach((t) => set.add(t)));
+    return Array.from(set);
+  },
+
   addTimelineEntry(id, entry) {
     const c = this._cases.find((x) => x.id === id);
     if (c) {
