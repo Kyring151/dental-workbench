@@ -1,27 +1,29 @@
 /**
- * 齿案台 · 云端配置（LeanCloud 国内版）
+ * 齿案台 · 云端配置（Cloudinary 图床 + 端到端加密数据）
  *
- * 把下面两个密钥填好后，工作台会自动切换为「云端模式」：
- *  - 病例数据 + 登录账号 存入 LeanCloud 云数据库（手机/电脑同步）
- *  - 图片上传到 LeanCloud 文件存储（国内 CDN，不再受 5MB 限制）
+ * 填好下面两项后，工作台自动切换为「云端模式」：
+ *  - 图片上传到 Cloudinary 图床（大图不受限，国内可访问）
+ *  - 病例数据端到端加密后存入免费云存储（jsonstorage.net）
+ *    「密码」即加密钥匙，不设账号、不存服务器，云服务商也看不到内容
  *
  * 在填好之前，工作台保持「本地模式」照常可用（数据存在浏览器本地）。
  *
- * 密钥获取方式见 SETUP_CLOUD.md。注意：App Key 是「公开令牌」，任何人
- * 都能在网页源码里看到，所以我们用 LeanCloud 的登录账号 + 数据 ACL
- * （每个病例只允许创建它的账号读写）来保护数据。
+ * 使用流程（详见 SETUP_CLOUD.md）：
+ *  1. 首次打开 → 设置密码 → 系统生成「同步码」请保存好
+ *  2. 之后打开 → 输入密码即解锁本设备数据
+ *  3. 换设备 → 输入密码 + 粘贴同步码即可恢复
+ *
+ * ⚠️ 密码忘记无法找回（数据是加密的）；同步码换设备时才用。
  */
 window.APP_CONFIG = {
-  // ===== LeanCloud（数据库 + 用户系统 + 图片存储）=====
-  // 控制台 → 设置 → 应用凭证：复制「App ID」和「App Key」（不是 Master Key！）
-  LEANCLOUD_APP_ID: "", // 例如 "abcd1234wxyz5678abcd1234"
-  LEANCLOUD_APP_KEY: "", // 例如 "abcd1234wxyz5678abcd1234"
+  // ===== Cloudinary（图片存储）=====
+  // Cloudinary 控制台 → Dashboard 看 Cloud name；Settings → Upload →
+  // Upload presets 看预设名。预设必须设为「Unsigned 免签名」模式。
+  CLOUDINARY_CLOUD_NAME: "trolahpr", // 例如 "dx7kq2abc"
+  CLOUDINARY_UPLOAD_PRESET: "Kyring" // 例如 "my_unsigned_preset"（必须 Unsigned）
 
-  // 可选。留空则自动使用公共入口 https://api.leancloud.cn
-  // 若控制台「设置 → 应用凭证」里有专属 API 绑定域名（形如
-  // https://xxxx.api.lc-cn-n1-shared.com），建议填到这里，更稳定。
-  LEANCLOUD_SERVER_URLS: ""
-
-  // ===== 判定 =====
-  // App ID 与 App Key 都填了才视为云端模式；否则走本地模式。
+  // ===== 数据存储 =====
+  // 无需配置。病例数据经 gzip 压缩 + AES-256 加密后存入 JSONBin
+  // （免费、国内可访问）。首次使用需注册 JSONBin 并粘贴 Master Key，
+  // 详见 SETUP_CLOUD.md。
 };
