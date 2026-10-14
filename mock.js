@@ -1,12 +1,5 @@
 /**
- * 齿案台 · 数据层（内存缓存 + 本地/云端双持久化）
- *
- * 工作台所有代码都从这里读写数据，内部会按配置自动选择存储：
- *  - 未配置云端（默认）→ 写入浏览器 localStorage（离线可用）
- *  - 配置云端后        → 写入 Supabase 云数据库（手机/电脑同步）
- *
- * 对外接口保持同步调用；云模式时数据先由 cloud.js 灌入内存缓存，
- * 写入在内存中即时生效，同时后台逐步同步到云端。
+ * 齿案台 · 内存缓存 + 本机副本/CloudBase 共享区
  */
 const Storage = {
   mode: "local",
@@ -14,15 +7,19 @@ const Storage = {
   /* ---- 内存缓存（唯一真相来源） ---- */
   _cases: [],
   _profile: {},
+  _deletedIds: [],
 
   /* ---- 持久化分发 ---- */
   _persist() {
-    // 单机模式：数据一律写本机 localStorage；图片只存 URL（大图在 Cloudinary）
+    // 本机副本用于离线保底；已登录时同步到 CloudBase 共享区。
     try {
       localStorage.setItem(Storage.KEY_CASES, JSON.stringify(this._cases));
       localStorage.setItem(Storage.KEY_PROFILE, JSON.stringify(this._profile));
     } catch (e) {
       alert("本地存储空间不足，请删除部分大图后重试。");
+    }
+    if (window.CloudData && window.CloudData.active) {
+      window.CloudData.queueSave(this._cases, this._profile, this._deletedIds);
     }
   },
 
@@ -38,6 +35,24 @@ const Storage = {
     } catch {
       this._profile = {};
     }
+    try {
+      this._deletedIds = JSON.parse(localStorage.getItem(Storage.KEY_DELETED)) || [];
+    } catch {
+      this._deletedIds = [];
+    }
+  },
+
+  hydrateFromCloud(cases, profile, deletedIds) {
+    this._cases = Array.isArray(cases) ? cases : [];
+    this._profile = profile && typeof profile === "object" ? profile : {};
+    this._deletedIds = Array.isArray(deletedIds) ? deletedIds : [];
+    try {
+      localStorage.setItem(Storage.KEY_CASES, JSON.stringify(this._cases));
+      localStorage.setItem(Storage.KEY_PROFILE, JSON.stringify(this._profile));
+      localStorage.setItem(Storage.KEY_DELETED, JSON.stringify(this._deletedIds));
+    } catch (e) {
+      console.warn("Cloud data loaded, but the local backup could not be updated", e);
+    }
   },
 
   getCases() {
@@ -46,6 +61,8 @@ const Storage = {
 
   setCases(list) {
     this._cases = list;
+    const restored = new Set((list || []).map((item) => item && item.id).filter(Boolean));
+    this._deletedIds = this._deletedIds.filter((id) => !restored.has(id));
     this._persist();
   },
 
@@ -62,6 +79,7 @@ const Storage = {
     const c = this._cases.find((x) => x.id === id);
     if (c) {
       c.status = status;
+      c.updatedAt = new Date().toISOString();
       if (status === "已完成" && !c.completionDate) {
         c.completionDate = new Date().toISOString().slice(0, 10);
       } else if (status === "进行中") {
@@ -87,7 +105,12 @@ const Storage = {
   deleteCase(id) {
     const i = this._cases.findIndex((x) => x.id === id);
     let removed = null;
-    if (i >= 0) { removed = this._cases[i]; this._cases.splice(i, 1); this._persist(); }
+    if (i >= 0) {
+      removed = this._cases[i];
+      this._cases.splice(i, 1);
+      this._deletedIds = Array.from(new Set(this._deletedIds.concat(id)));
+      this._persist();
+    }
     return removed;
   },
 
@@ -122,6 +145,7 @@ const Storage = {
     if (c) {
       c.timeline = c.timeline || [];
       c.timeline.push(entry);
+      c.updatedAt = new Date().toISOString();
       this._persist();
     }
     return this._cases.find((x) => x.id === id);
@@ -138,7 +162,8 @@ const Storage = {
   },
 
   KEY_CASES: "dentalWorkbench.cases",
-  KEY_PROFILE: "dentalWorkbench.profile"
+  KEY_PROFILE: "dentalWorkbench.profile",
+  KEY_DELETED: "dentalWorkbench.deletedCaseIds"
 };
 
 /* ---- 通用工具 ---- */

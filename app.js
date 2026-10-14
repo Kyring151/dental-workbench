@@ -385,24 +385,19 @@ function initDataTransfer() {
       e.target.value = "";
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const data = JSON.parse(reader.result);
           const incoming = Array.isArray(data.cases) ? data.cases : Array.isArray(data) ? data : null;
           if (!incoming) { alert("文件格式不正确，请选择齿案台导出的 .json 备份。"); return; }
-          const doMerge = confirm(
-            "检测到 " + incoming.length + " 个病例。\n\n确定 = 合并（保留现有，跳过编号相同的）\n取消 = 整体替换为备份内容"
-          );
-          if (doMerge) {
-            const existingIds = new Set(Storage.getCases().map((c) => c.id));
-            const merged = Storage.getCases().concat(incoming.filter((c) => c && !existingIds.has(c.id)));
-            Storage.setCases(merged);
-          } else {
-            Storage.setCases(incoming);
-          }
+          if (!confirm("检测到 " + incoming.length + " 个病例。\n\n确定 = 合并到共享区（病例编号相同的保留现有记录）\n取消 = 放弃导入")) return;
+          const existingIds = new Set(Storage.getCases().map((c) => c.id));
+          const merged = Storage.getCases().concat(incoming.filter((c) => c && !existingIds.has(c.id)));
+          Storage.setCases(merged);
           if (data.profile && typeof data.profile === "object") {
             Storage.setProfile({ ...Storage.getProfile(), ...data.profile });
           }
+          if (window.CloudData && window.CloudData.active) await window.CloudData.awaitSaved();
           alert("导入完成。");
           location.reload();
         } catch (err) {
@@ -617,9 +612,12 @@ function renderDetail() {
 
   // 复制病例
   const copyBtn = root.querySelector("#copy-case-btn");
-  if (copyBtn) copyBtn.addEventListener("click", () => {
+  if (copyBtn) copyBtn.addEventListener("click", async () => {
     const copy = Storage.duplicateCase(c.id);
-    if (copy) location.href = "case-detail.html?id=" + copy.id;
+    if (copy) {
+      if (window.CloudData) await window.CloudData.awaitSaved();
+      location.href = "case-detail.html?id=" + copy.id;
+    }
   });
 
   // 删除病例
@@ -954,16 +952,16 @@ async function uploadRawFiles(files) {
   for (const file of files) {
     if (!file.type.startsWith("image/")) continue;
     const dataUrl = await readFileAsDataURL(file);
-    let url = dataUrl;
+    let imageInfo = { url: dataUrl };
     if (window.CloudData && window.CloudData.hasImageCloud()) {
-      try { url = await window.CloudData.uploadImage(dataUrl); }
+      try { imageInfo = await window.CloudData.uploadImage(dataUrl); }
       catch (e) { alert((e && e.message) || "图片上传失败"); return null; }
     }
     out.push({
       id: "g" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
       type: "uploaded",
       label: file.name,
-      url
+      ...imageInfo
     });
   }
   return out;
@@ -1004,8 +1002,7 @@ async function handleReplaceImage(phase, idx, file) {
   if (!items || !items.length) return;
   const list = (detailCase.images || {})[phase] || [];
   if (idx < 0 || idx >= list.length) return;
-  list[idx].url = items[0].url;
-  list[idx].label = items[0].label;
+  list[idx] = { ...list[idx], ...items[0] };
   Storage.updateCase(detailCase.id, { images: detailCase.images });
   renderDetail();
 }
@@ -1231,9 +1228,10 @@ function openEditCaseModal(id) {
 }
 
 /* ---- 删除病例 ---- */
-function doDeleteCase(id) {
+async function doDeleteCase(id) {
   if (!confirm("确定删除该病例吗？此操作不可恢复。")) return;
   Storage.deleteCase(id);
+  if (window.CloudData) await window.CloudData.awaitSaved();
   location.href = "cases.html";
 }
 
@@ -1642,8 +1640,8 @@ function initNewCaseWizard() {
       out[k] = [];
       for (const img of images[k] || []) {
         try {
-          const url = await window.CloudData.uploadImage(img.url);
-          out[k].push({ ...img, url: url.replace(/^http:/, "https:") });
+          const uploaded = await window.CloudData.uploadImage(img.url);
+          out[k].push({ ...img, ...uploaded, url: uploaded.url.replace(/^http:/, "https:") });
         } catch (e) {
           alert((e && e.message) || "图片上传失败，请重试");
           return null;
@@ -1662,7 +1660,7 @@ function initNewCaseWizard() {
       post: uploadedImages.post
     };
 
-    // 有 Cloudinary 图床：图片上传云端取直链（大图不受限）；否则用本地 base64（小图直存）
+    // 新增影像上传到 CloudBase 私有存储，病例数据仅保存文件 ID。
     const images =
       window.CloudData && window.CloudData.hasImageCloud()
         ? await uploadImagesCloud(rawImages)
@@ -1693,6 +1691,7 @@ function initNewCaseWizard() {
 
     Storage.addCase(c);
     clearDraft();
+    if (window.CloudData) await window.CloudData.awaitSaved();
 
     location.href = "case-detail.html?id=" + c.id;
   }
@@ -1723,8 +1722,15 @@ function initNewCaseWizard() {
 async function init() {
   initNavigation();
 
-  // 单机模式：直接灌入本地缓存
   Storage.hydrateFromLocal();
+  if (window.CloudData && window.CloudData.ready) {
+    try {
+      await window.CloudData.ready;
+    } catch (error) {
+      console.error("CloudBase initialization failed", error);
+      return;
+    }
+  }
 
   initProfile();
   renderDashboardStats();

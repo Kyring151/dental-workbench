@@ -1873,3 +1873,72 @@ img, svg {
   z-index: 5;
   pointer-events: none;
 }
+/* CloudBase shared access */
+#cloud-login-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(244, 250, 255, .98);
+}
+.cloud-gate-panel {
+  width: min(100%, 380px);
+  padding: 30px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 44px rgba(14, 116, 144, .12);
+}
+.cloud-gate-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  color: #0369a1;
+  background: #e0f2fe;
+  font-size: 22px;
+  font-weight: 700;
+}
+.cloud-gate-panel h1 { margin: 18px 0 6px; font-size: 22px; color: #0f172a; }
+.cloud-gate-panel > p { margin: 0 0 24px; color: #64748b; font-size: 14px; }
+.cloud-gate-panel form { display: grid; gap: 10px; }
+.cloud-gate-panel label { margin-top: 4px; color: #334155; font-size: 13px; font-weight: 600; }
+.cloud-gate-panel input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #0f172a;
+  background: #fff;
+  font: inherit;
+}
+.cloud-gate-panel input:focus { outline: 2px solid #bae6fd; border-color: #0284c7; }
+.cloud-gate-panel button { justify-content: center; margin-top: 8px; }
+.cloud-gate-error { min-height: 18px; margin: 0; color: #b91c1c; font-size: 13px; }
+#cloud-sync-status {
+  position: fixed;
+  right: 14px;
+  bottom: 12px;
+  z-index: 1000;
+  max-width: min(460px, calc(100vw - 28px));
+  padding: 7px 11px;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  color: #075985;
+  background: #f0f9ff;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, .08);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+#cloud-sync-status[data-state="pending"] { color: #854d0e; border-color: #fde68a; background: #fffbeb; }
+#cloud-sync-status[data-state="error"] { color: #991b1b; border-color: #fecaca; background: #fef2f2; }
+@media (max-width: 480px) {
+  .cloud-gate-panel { padding: 24px 20px; }
+  #cloud-sync-status { right: 10px; bottom: 10px; font-size: 11px; }
+}

@@ -7,13 +7,13 @@
   <title>工作台 · 齿案台</title>
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <script>
-  window.APP_VERSION = "20260922-6";
+  window.APP_VERSION = "20261014-1";
   (function () {
     var V = window.APP_VERSION;
     function v(u) { return u + (u.indexOf("?") >= 0 ? "&" : "?") + "v=" + V; }
     var h = document.head;
     var l = document.createElement("link"); l.rel = "stylesheet"; l.href = v("styles.css"); h.appendChild(l);
-    var q = ["config.js", "mock.js", "cloud.js", "app.js"];
+    var q = ["config.js", "mock.js", "https://static.cloudbase.net/cloudbase-js-sdk/3.0.1/cloudbase.full.js", "cloud.js", "app.js"];
     (function boot(i) { if (i >= q.length) return; var s = document.createElement("script"); s.src = v(q[i]); s.onload = function () { boot(i + 1); }; s.onerror = function () { boot(i + 1); }; h.appendChild(s); })(0);
     // 新版本自动检测：检测到更新时在底部提示一键刷新
     fetch("version.txt?t=" + Date.now(), { cache: "no-store" })
@@ -67,7 +67,7 @@
     <div class="page__header">
       <div>
         <h1 class="page__title" id="greeting">你好，医生</h1>
-        <p class="page__subtitle">这里是你的口腔病例概览，所有数据均保存在本地浏览器。</p>
+        <p class="page__subtitle">这里是共享病例概览，数据会同步至云端并保留本机副本。</p>
       </div>
       <div class="page__actions">
         <a href="cases.html" class="btn btn--secondary">
