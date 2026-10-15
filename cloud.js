@@ -226,6 +226,12 @@
     showStatus("共享云端已同步", "ok");
   }
 
+  function gateErrorMessage(error) {
+    const message = String((error && error.message) || error || "");
+    if (/credentials not found|not.*logged.*in/i.test(message)) return "";
+    return message || "连接云端失败，请检查网络和安全域名设置。";
+  }
+
   function start() {
     if (readyStarted) return;
     readyStarted = true;
@@ -251,7 +257,7 @@
       } else {
         showGate("");
       }
-    }).catch((error) => showGate(error.message || "连接云端失败，请检查网络和安全域名设置。"));
+    }).catch((error) => showGate(gateErrorMessage(error)));
   }
 
   function flushSave() {
