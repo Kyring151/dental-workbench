@@ -36,16 +36,18 @@ function initNavigation() {
 }
 
 /* ==========================================================
-   2. Personal Profile (姓氏称呼)
+   2. Personal Profile (姓氏称呼 + 医生身份)
    ========================================================== */
+const DOCTORS = ["韩亚男", "刘毅"];
+
 function initProfile() {
   const greetingEl = document.getElementById("greeting");
   if (!greetingEl) return;
 
   function renderGreeting() {
     const profile = Storage.getProfile();
-    const surname = profile.surname;
-    greetingEl.innerHTML = surname ? `你好，${surname}医生` : "你好，医生";
+    const name = profile.doctor || profile.surname;
+    greetingEl.innerHTML = name ? `你好，${name}医生` : "你好，医生";
   }
 
   renderGreeting();
@@ -66,6 +68,38 @@ function initProfile() {
       }
     });
   }
+
+  const doctorBtn = document.getElementById("profile-doctor");
+  if (doctorBtn) {
+    doctorBtn.addEventListener("click", () => openDoctorPicker(renderGreeting));
+  }
+}
+
+/** 选择当前医生身份（韩亚男 / 刘毅），决定「我的病例」归属 */
+function openDoctorPicker(onDone) {
+  const current = Storage.getProfile().doctor || "";
+  const overlay = document.createElement("div");
+  overlay.setAttribute("style", "position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;");
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;max-width:360px;width:100%;box-shadow:0 24px 60px rgba(2,132,199,.25);overflow:hidden;">
+      <div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;"><h2 style="margin:0;font-size:18px;">我是哪位医生？</h2></div>
+      <p style="margin:14px 22px 0;color:#64748B;font-size:13px;line-height:1.6;">选择后，新建病例会默认挂在你名下，病例列表默认只看「我的病例」，随时可以回来切换。</p>
+      <div style="padding:18px 22px 6px;display:grid;gap:10px;">
+        ${DOCTORS.map((d) => `<button class="btn ${current === d ? "btn--primary" : "btn--secondary"}" type="button" data-doctor="${d}" style="justify-content:center;">${d}</button>`).join("")}
+      </div>
+      <div style="padding:12px 22px 18px;display:flex;justify-content:flex-end;">
+        <button class="btn btn--ghost btn--sm" type="button" id="dp-cancel">取消</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#dp-cancel").onclick = () => overlay.remove();
+  overlay.querySelectorAll("[data-doctor]").forEach((btn) => {
+    btn.onclick = () => {
+      Storage.setProfile({ ...Storage.getProfile(), doctor: btn.dataset.doctor });
+      overlay.remove();
+      if (onDone) onDone();
+    };
+  });
 }
 
 /* ==========================================================
@@ -104,7 +138,8 @@ function countImages(c) {
 function renderDashboardCharts() {
   const typeBox = document.getElementById("chart-types");
   const monthBox = document.getElementById("chart-months");
-  if (!typeBox && !monthBox) return;
+  const doctorBox = document.getElementById("chart-doctors");
+  if (!typeBox && !monthBox && !doctorBox) return;
 
   const cases = Storage.getCases();
 
@@ -150,6 +185,23 @@ function renderDashboardCharts() {
           </div>`).join("")}
       </div>`;
   }
+
+  if (doctorBox) {
+    const counts = {};
+    DOCTORS.forEach((d) => { counts[d] = 0; });
+    cases.forEach((c) => {
+      const key = c.doctor || "未分配";
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    const entries = Object.entries(counts);
+    const maxD = Math.max(1, ...entries.map((e) => e[1]));
+    doctorBox.innerHTML = entries.map(([t, n]) => `
+      <div class="chart-row">
+        <span class="chart-row__label">${esc(t)}</span>
+        <div class="chart-row__track"><div class="chart-row__bar" style="width:${Math.round((n / maxD) * 100)}%"></div></div>
+        <span class="chart-row__num">${n}</span>
+      </div>`).join("");
+  }
 }
 
 function renderRecentCases() {
@@ -180,6 +232,7 @@ function renderRecentCases() {
 
 function buildCaseCard(c) {
   const statusClass = c.status === "已完成" ? "case-card__status--done" : "case-card__status--active";
+  const doctorTag = c.doctor ? `<span class="tag tag--purple">${esc(c.doctor)}</span>` : "";
   const tagsHtml = (c.tags || []).slice(0, 2).map((t) => `<span class="tag ${getTagClass(t)}">${t}</span>`).join("");
   const imgCount = countImages(c);
 
@@ -197,7 +250,7 @@ function buildCaseCard(c) {
         <p class="paragraph mb-0">${c.chiefComplaint || "暂无主诉"}</p>
       </div>
       <div class="case-card__footer">
-        <div class="tag-list">${tagsHtml}</div>
+        <div class="tag-list">${doctorTag}${tagsHtml}</div>
         <div class="case-card__count">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           ${imgCount}
@@ -213,7 +266,10 @@ function buildCaseCard(c) {
 let casesViewMode = "grid";
 let casesFilter = "全部";
 let casesTag = "全部";
+let casesDoctorFilter = "全部";
 let casesSearch = "";
+
+const DOCTOR_FILTER_KEY = "dentalWorkbench.doctorFilter";
 
 function initCasesPage() {
   const gridView = document.getElementById("cases-grid-view");
@@ -222,8 +278,25 @@ function initCasesPage() {
   const filterChips = document.querySelectorAll("[data-filter]");
   const viewButtons = document.querySelectorAll("[data-view]");
   const tagWrap = document.getElementById("cases-tagfilter");
+  const doctorChips = document.querySelectorAll("[data-dfilter]");
+  const mineChip = document.getElementById("dfilter-mine");
 
   if (!gridView || !listView) return;
+
+  // 「我的病例」筛选默认跟随当前医生身份，并记住上次手动选择
+  const myDoctor = Storage.getProfile().doctor || "";
+  const savedDoctorFilter = localStorage.getItem(DOCTOR_FILTER_KEY);
+  const validDoctorFilters = ["我的", "全部"].concat(DOCTORS);
+  casesDoctorFilter = validDoctorFilters.includes(savedDoctorFilter)
+    ? savedDoctorFilter
+    : (myDoctor ? "我的" : "全部");
+  if (mineChip) {
+    mineChip.textContent = myDoctor ? `我的（${myDoctor}）` : "我的病例";
+  }
+
+  function applyDoctorChips() {
+    doctorChips.forEach((ch) => ch.classList.toggle("filter-chip--active", ch.dataset.dfilter === casesDoctorFilter));
+  }
 
   function renderTagFilter() {
     if (!tagWrap) return;
@@ -243,19 +316,24 @@ function initCasesPage() {
 
   function renderCases() {
     const all = Storage.getCases();
+    const myDoctor = Storage.getProfile().doctor || "";
     const filtered = all.filter((c) => {
       const matchesFilter =
         casesFilter === "全部" || c.status === casesFilter || c.treatmentType === casesFilter;
       const matchesTag =
         casesTag === "全部" || (c.tags || []).includes(casesTag);
+      const matchesDoctor =
+        casesDoctorFilter === "全部" ||
+        (casesDoctorFilter === "我的" ? (!myDoctor || c.doctor === myDoctor) : c.doctor === casesDoctorFilter);
       const q = casesSearch.toLowerCase();
       const haystack = [
         c.patientName, c.diagnosis, c.chiefComplaint, c.patientRequest,
         c.history, c.pastHistory, c.reason, c.plan, c.exam, c.treatmentType,
+        c.doctor,
         (c.tags || []).join(" ")
       ].join(" ").toLowerCase();
       const matchesSearch = q === "" || haystack.includes(q);
-      return matchesFilter && matchesTag && matchesSearch;
+      return matchesFilter && matchesTag && matchesDoctor && matchesSearch;
     });
 
     const countEl = document.getElementById("cases-count");
@@ -297,6 +375,16 @@ function initCasesPage() {
     });
   });
 
+  applyDoctorChips();
+  doctorChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      casesDoctorFilter = chip.dataset.dfilter;
+      try { localStorage.setItem(DOCTOR_FILTER_KEY, casesDoctorFilter); } catch (_) {}
+      applyDoctorChips();
+      renderCases();
+    });
+  });
+
   viewButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       viewButtons.forEach((b) => b.classList.remove("view-toggle__btn--active"));
@@ -323,6 +411,7 @@ function buildCaseTable(list) {
           <tr>
             <th>病例编号</th>
             <th>患者</th>
+            <th>医生</th>
             <th>诊断</th>
             <th>治疗类型</th>
             <th>状态</th>
@@ -338,6 +427,7 @@ function buildCaseTable(list) {
             <tr>
               <td><span class="text-muted">${c.id}</span></td>
               <td><a href="case-detail.html?id=${c.id}" style="color:var(--color-primary);font-weight:600;">${c.patientName || "未命名"}</a><br><span class="text-muted">${c.age ? c.age + " 岁" : "--"} · ${c.gender || "--"}</span></td>
+              <td>${c.doctor ? `<span class="tag tag--purple">${esc(c.doctor)}</span>` : "--"}</td>
               <td>${c.diagnosis || "--"}</td>
               <td>${c.treatmentType ? `<span class="tag ${getTagClass(c.treatmentType)}">${c.treatmentType}</span>` : "--"}</td>
               <td><span class="tag ${c.status === "已完成" ? "tag--teal" : "tag--amber"}">${c.status || "进行中"}</span></td>
@@ -478,7 +568,8 @@ function renderDetail() {
   const c = detailCase;
   const root = document.getElementById("detail-root");
   const isDone = c.status === "已完成";
-  const tags = (c.tags || []).map((t) => `<span class="tag ${getTagClass(t)}">${esc(t)}</span>`).join("");
+  const doctorTag = c.doctor ? `<span class="tag tag--purple">${esc(c.doctor)}</span>` : "";
+  const tags = doctorTag + (c.tags || []).map((t) => `<span class="tag ${getTagClass(t)}">${esc(t)}</span>`).join("");
 
   const statusControl = `
     <div class="status-control" role="group" aria-label="病例状态">
@@ -519,6 +610,7 @@ function renderDetail() {
         ${tags ? `<div class="tag-list" aria-label="病例标签">${tags}</div>` : ""}
 
         <div class="patient-meta">
+          <div class="meta-item"><span class="meta-item__label">主治医生</span><span class="meta-item__value">${c.doctor ? esc(c.doctor) : "未分配"}</span></div>
           <div class="meta-item"><span class="meta-item__label">年龄</span><span class="meta-item__value">${c.age ? esc(c.age) + " 岁" : "--"}</span></div>
           <div class="meta-item"><span class="meta-item__label">性别</span><span class="meta-item__value">${esc(c.gender) || "--"}</span></div>
           <div class="meta-item"><span class="meta-item__label">初诊日期</span><span class="meta-item__value">${esc(c.visitDate) || "--"}</span></div>
@@ -1181,6 +1273,7 @@ function openEditCaseModal(id) {
         <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">患者姓名</span><input class="input" id="e-name" value="${esc(c.patientName || "")}"/></label>
         <label><span style="display:block;color:#475569;margin-bottom:4px;">年龄</span><input class="input" id="e-age" type="number" value="${esc(c.age || "")}"/></label>
         <label><span style="display:block;color:#475569;margin-bottom:4px;">性别</span><select class="input" id="e-gender"><option value="">--</option><option ${c.gender === "男" ? "selected" : ""}>男</option><option ${c.gender === "女" ? "selected" : ""}>女</option></select></label>
+        <label><span style="display:block;color:#475569;margin-bottom:4px;">主治医生</span><select class="input" id="e-doctor"><option value="">未分配</option><option ${c.doctor === "韩亚男" ? "selected" : ""}>韩亚男</option><option ${c.doctor === "刘毅" ? "selected" : ""}>刘毅</option></select></label>
         <label><span style="display:block;color:#475569;margin-bottom:4px;">初诊日期</span><input class="input" id="e-visit" type="date" value="${esc(c.visitDate || "")}"/></label>
         <label><span style="display:block;color:#475569;margin-bottom:4px;">治疗类型</span><select class="input" id="e-type">${opts}</select></label>
         <label style="grid-column:1 / -1;"><span style="display:block;color:#475569;margin-bottom:4px;">诊断</span><input class="input" id="e-diagnosis" value="${esc(c.diagnosis || "")}"/></label>
@@ -1205,6 +1298,7 @@ function openEditCaseModal(id) {
       patientName: val("#e-name").trim(),
       age: val("#e-age") || null,
       gender: val("#e-gender"),
+      doctor: val("#e-doctor"),
       visitDate: val("#e-visit"),
       treatmentType: val("#e-type"),
       diagnosis: val("#e-diagnosis").trim(),
@@ -1519,7 +1613,7 @@ function value(id) {
 const DRAFT_KEY = "dentalWorkbench.newCaseDraft";
 
 const DRAFT_FIELD_IDS = [
-  "f-name", "f-age", "f-gender", "f-visit-date",
+  "f-name", "f-age", "f-gender", "f-doctor", "f-visit-date",
   "f-chief", "f-request", "f-diagnosis", "f-type",
   "f-history", "f-past", "f-plan"
 ];
@@ -1582,6 +1676,12 @@ function initNewCaseWizard() {
     ["pre", "during", "post"].forEach((p) => renderUploadGrid(p));
   }
 
+  // 主治医生默认跟随当前登录身份（草稿里已选过则不覆盖）
+  const doctorSel = document.getElementById("f-doctor");
+  if (doctorSel && !doctorSel.value && Storage.getProfile().doctor) {
+    doctorSel.value = Storage.getProfile().doctor;
+  }
+
   // 随输入自动保存草稿
   DRAFT_FIELD_IDS.forEach((id) => {
     const el = document.getElementById(id);
@@ -1603,6 +1703,7 @@ function initNewCaseWizard() {
   function stepValid() {
     if (currentStep === 0) {
       if (!value("f-name")) { alert("请填写患者昵称。"); return false; }
+      if (!value("f-doctor")) { alert("请选择主治医生。"); return false; }
       if (!value("f-chief")) { alert("请填写主诉 / 就诊原因。"); return false; }
     } else if (currentStep === 1) {
       if (!value("f-diagnosis")) { alert("请填写诊断。"); return false; }
@@ -1672,6 +1773,7 @@ function initNewCaseWizard() {
       patientName: value("f-name"),
       age: value("f-age") || null,
       gender: (document.getElementById("f-gender") || {}).value || "",
+      doctor: value("f-doctor"),
       visitDate: value("f-visit-date") || new Date().toISOString().slice(0, 10),
       completionDate: null,
       status: "进行中",

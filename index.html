@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -7,7 +7,7 @@
   <title>工作台 · 齿案台</title>
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <script>
-  window.APP_VERSION = "20261015-2";
+  window.APP_VERSION = "20261015-3";
   (function () {
     var V = window.APP_VERSION;
     function v(u) { return u + (u.indexOf("?") >= 0 ? "&" : "?") + "v=" + V; }
@@ -136,6 +136,15 @@
         </div>
         <div class="chart-months" id="chart-months"></div>
       </div>
+      <div class="card">
+        <div class="card__header">
+          <div>
+            <h2 class="card__title">医生病例分布</h2>
+            <p class="card__subtitle">韩亚男 / 刘毅 名下的病例数量</p>
+          </div>
+        </div>
+        <div class="chart-types" id="chart-doctors"></div>
+      </div>
     </div>
 
     <!-- 最近病例 -->
@@ -145,10 +154,16 @@
           <h2 class="card__title">最近病例</h2>
           <p class="card__subtitle">最近录入的口腔病例记录</p>
         </div>
-        <button class="btn btn--secondary btn--sm" type="button" id="profile-edit">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          设置我的姓名
-        </button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn--secondary btn--sm" type="button" id="profile-edit">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            设置我的姓名
+          </button>
+          <button class="btn btn--secondary btn--sm" type="button" id="profile-doctor">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            切换身份
+          </button>
+        </div>
       </div>
       <div class="case-grid" id="recent-cases"><!-- JS 渲染 --></div>
     </div>

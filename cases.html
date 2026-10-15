@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -7,7 +7,7 @@
   <title>病例列表 · 齿案台</title>
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <script>
-  window.APP_VERSION = "20261015-2";
+  window.APP_VERSION = "20261015-3";
   (function () {
     var V = window.APP_VERSION;
     function v(u) { return u + (u.indexOf("?") >= 0 ? "&" : "?") + "v=" + V; }
@@ -115,6 +115,12 @@
         <button class="filter-chip" data-filter="根管治疗">根管治疗</button>
         <button class="filter-chip" data-filter="种植修复">种植修复</button>
         <button class="filter-chip" data-filter="牙周治疗">牙周治疗</button>
+      </div>
+      <div class="filter-group" role="group" aria-label="按医生筛选">
+        <button class="filter-chip" data-dfilter="我的" id="dfilter-mine">我的病例</button>
+        <button class="filter-chip" data-dfilter="全部">全部医生</button>
+        <button class="filter-chip" data-dfilter="韩亚男">韩亚男</button>
+        <button class="filter-chip" data-dfilter="刘毅">刘毅</button>
       </div>
       <div class="filter-group" role="group" aria-label="按标签筛选" id="cases-tagfilter"></div>
     </div>
