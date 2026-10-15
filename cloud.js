@@ -28,12 +28,12 @@
           <div class="cloud-gate-mark" aria-hidden="true">齿</div>
           <h1 id="cloud-gate-title">齿案台共享区</h1>
           <p>登录共享账号以访问病例与影像</p>
+          <p class="cloud-gate-error" id="cloud-gate-error" role="alert"></p>
           <form id="cloud-login-form">
             <label for="cloud-username">用户名或邮箱</label>
             <input id="cloud-username" autocomplete="username" required />
             <label for="cloud-password">密码</label>
             <input id="cloud-password" type="password" autocomplete="current-password" required />
-            <p class="cloud-gate-error" id="cloud-gate-error" role="alert"></p>
             <button class="btn btn--primary" type="submit">登录并同步</button>
           </form>
         </section>`;
